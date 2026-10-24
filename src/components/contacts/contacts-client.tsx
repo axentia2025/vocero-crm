@@ -209,6 +209,7 @@ export function ContactsClient() {
                   </div>
                   <p className="text-xs text-muted-foreground">
                     {formatPhone(c.phone)}
+                    {c.email ? ` · ${c.email}` : ""}
                     {c.notes ? ` · ${c.notes.slice(0, 60)}` : ""}
                   </p>
                 </div>
@@ -327,9 +328,10 @@ function EditDialog({
 }: {
   contact: ContactDto;
   onClose: () => void;
-  onSave: (patch: { name: string; notes: string; aiPaused?: boolean }) => Promise<void>;
+  onSave: (patch: { name: string; notes: string; email?: string | null; aiPaused?: boolean }) => Promise<void>;
 }) {
   const [name, setName] = useState(contact.name);
+  const [email, setEmail] = useState(contact.email ?? "");
   const [notes, setNotes] = useState(contact.notes ?? "");
   const [aiPaused, setAiPaused] = useState(contact.aiPaused ?? false);
 
@@ -352,6 +354,18 @@ function EditDialog({
               id="edit-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium" htmlFor="edit-email">
+              Correo electrónico
+            </label>
+            <Input
+              id="edit-email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="correo@ejemplo.com"
             />
           </div>
           <div className="space-y-1.5">
@@ -391,6 +405,7 @@ function EditDialog({
               void onSave({
                 name: name.trim(),
                 notes,
+                email: email.trim() || null,
                 // Solo si cambió: mandarlo siempre reescribiría el interruptor
                 // de la Bandeja cada vez que alguien corrige un nombre.
                 ...(aiPaused !== (contact.aiPaused ?? false) ? { aiPaused } : {}),

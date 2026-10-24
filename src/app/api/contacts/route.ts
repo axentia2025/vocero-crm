@@ -113,6 +113,7 @@ const createSchema = z.object({
     .string()
     .trim()
     .regex(/^\d{7,15}$/, "Teléfono en dígitos, con código de país (ej. 5215512345678)"),
+  email: z.string().email().max(254).optional(),
   notes: z.string().max(4000).optional(),
   source: z.enum(["anuncio", "organico", "referido", "conocido", "otro"]).optional(),
   /** Etapa inicial del lead; si no viene, la primera abierta del tablero. */
@@ -134,6 +135,7 @@ export const POST = withAuth(async (session, req: Request) => {
       name: body.data.name,
       phone,
       waIdentity: phone,
+      email: body.data.email ?? null,
       notes: body.data.notes ?? null,
       source: body.data.source ?? null,
     })

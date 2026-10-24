@@ -15,6 +15,7 @@ export function serializeContact(
     id: c.id,
     name: c.name,
     phone: c.phone,
+    email: c.email,
     notes: c.notes,
     aiPaused: c.aiPaused,
     stageName,

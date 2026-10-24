@@ -6,7 +6,7 @@ export type ConversationDto = {
   id: string;
   /** 014: canal de la conversacion, para el distintivo de la bandeja. */
   channel: Channel;
-  contact: { id: string; name: string; phone: string | null };
+  contact: { id: string; name: string; phone: string | null; email: string | null };
   stageName: string | null;
   aiEnabled: boolean;
   handoffAt: string | null;
@@ -138,6 +138,8 @@ export type ContactDto = {
   name: string;
   /** null en contactos que llegaron solo con BSUID (003). */
   phone: string | null;
+  /** Correo electrónico del contacto. */
+  email: string | null;
   notes: string | null;
   /** Etapa del embudo del lead asociado; null si el contacto no tiene lead. */
   stageName: string | null;

@@ -142,6 +142,8 @@ export const contact = pgTable(
     waIdentity: text("wa_identity").notNull(),
     /** Teléfono como ATRIBUTO opcional (003): falta en contactos BSUID. */
     phone: text("phone"),
+    /** Correo electrónico del contacto (opcional). */
+    email: text("email"),
     /** Business-Scoped User ID si se conoce (003). */
     waUserId: text("wa_user_id"),
     name: text("name").notNull(),
