@@ -97,6 +97,18 @@
         "x-codigos-409": ["ai_paused", "herramienta_apagada", "etapa_no_permitida", "no_org"]
       }
     },
+    "/api/bot/contacts": {
+      "post": {
+        "summary": "Dar de alta un prospecto",
+        "description": "Crea un contacto nuevo en el CRM y le abre un lead en la primera etapa del pipeline. Exige la herramienta `crear_contacto` encendida en el perfil. Si el teléfono ya existe, responde 409 `duplicate`.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["name", "phone"], "properties": { "name": { "type": "string", "minLength": 1, "maxLength": 120 }, "phone": { "type": "string", "pattern": "^\\d{7,15}$", "description": "Teléfono en dígitos con código de país (ej. 5215512345678)" }, "email": { "type": "string", "format": "email", "maxLength": 254 }, "notes": { "type": "string", "maxLength": 4000 }, "source": { "type": "string", "enum": ["anuncio", "organico", "referido", "conocido", "otro"] } } } } } },
+        "responses": {
+          "201": { "description": "Contacto creado", "content": { "application/json": { "schema": { "type": "object", "required": ["ok", "contact"], "properties": { "ok": { "const": true }, "contact": { "type": "object", "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "phone": { "type": "string" }, "email": { "type": "string", "nullable": true } } }, "lead": { "type": "object", "nullable": true, "properties": { "id": { "type": "string" } } } } } } } },
+          "409": { "description": "`duplicate`: ya existe un contacto con ese teléfono. `no_org`.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "422": { "$ref": "#/components/responses/Invalido" }
+        }
+      }
+    },
     "/api/bot/handoff": {
       "post": {
         "summary": "Pasar la conversación a una persona",

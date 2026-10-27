@@ -14,6 +14,7 @@
 export type ClaveHerramienta =
   | "ficha"
   | "etapa"
+  | "crear_contacto"
   | "agendar"
   | "reprogramar"
   | "salida"
@@ -36,6 +37,12 @@ export const HERRAMIENTAS: readonly Herramienta[] = [
     etiqueta: "Llenar la ficha",
     descripcion:
       "Anota lo que aprende del cliente en su ficha del CRM.",
+  },
+  {
+    clave: "crear_contacto",
+    etiqueta: "Crear prospecto",
+    descripcion:
+      "Da de alta un nuevo contacto/prospecto en el CRM con nombre, teléfono y opcionalmente email y notas.",
   },
   {
     // 038 — Solo hacia adelante y entre etapas abiertas: ganar o perder un
