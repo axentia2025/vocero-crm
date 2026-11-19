@@ -381,7 +381,12 @@ function EditDialog({
   const [costoMensual, setCostoMensual] = useState(
     (contact.ficha?.costoMensual as string) ?? ""
   );
+  const [etapa, setEtapa] = useState(
+    (contact.ficha?.etapa as string) ?? ""
+  );
   const [aiPaused, setAiPaused] = useState(contact.aiPaused ?? false);
+
+  const ETAPAS = ["Interesado", "En Proceso", "POC", "Cliente Actual"];
 
   return (
     <div
@@ -428,6 +433,24 @@ function EditDialog({
               onChange={(e) => setEmail(e.target.value)}
               placeholder="correo@ejemplo.com"
             />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium" htmlFor="edit-etapa">
+              Etapa
+            </label>
+            <select
+              id="edit-etapa"
+              value={etapa}
+              onChange={(e) => setEtapa(e.target.value)}
+              className="h-9 w-full rounded-md border border-input bg-card px-2 text-sm"
+            >
+              <option value="">Sin etapa</option>
+              {ETAPAS.map((et) => (
+                <option key={et} value={et}>
+                  {et}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium" htmlFor="edit-servicios">
@@ -517,6 +540,7 @@ function EditDialog({
             onClick={() => {
               const fichaPatch: Record<string, unknown> = {};
               fichaPatch.empresa = empresa.trim() || null;
+              fichaPatch.etapa = etapa || null;
               fichaPatch.fechaIngreso = fechaIngreso || null;
               fichaPatch.fechaFirma = fechaFirma || null;
               fichaPatch.costoImplementacion = costoImpl.trim() || null;

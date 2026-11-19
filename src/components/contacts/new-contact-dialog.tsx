@@ -14,6 +14,8 @@ const SOURCES: { value: SourceValue; label: string }[] = [
   { value: "otro", label: "Otro" },
 ];
 
+const ETAPAS = ["Interesado", "En Proceso", "POC", "Cliente Actual"];
+
 export function NewContactDialog({
   onClose,
   onCreated,
@@ -28,9 +30,9 @@ export function NewContactDialog({
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [source, setSource] = useState<SourceValue>("referido");
+  const [etapa, setEtapa] = useState(ETAPAS[0]);
   const [servicios, setServicios] = useState("");
-  const [stages, setStages] = useState<StageDto[]>([]);
-  const [stageId, setStageId] = useState("");
+  const [hasStages, setHasStages] = useState(true);
   const [fechaIngreso, setFechaIngreso] = useState("");
   const [fechaFirma, setFechaFirma] = useState("");
   const [costoImpl, setCostoImpl] = useState("");
@@ -44,9 +46,7 @@ export function NewContactDialog({
       const res = await fetch("/api/pipeline/stages").catch(() => null);
       if (!res?.ok) return;
       const data = (await res.json()) as { stages: StageDto[] };
-      const abiertas = data.stages.filter((s) => s.kind === "open");
-      setStages(abiertas);
-      setStageId(abiertas[0]?.id ?? "");
+      setHasStages(data.stages.filter((s) => s.kind === "open").length > 0);
     })();
   }, []);
 
@@ -57,6 +57,7 @@ export function NewContactDialog({
 
     const ficha: Record<string, unknown> = {};
     if (empresa.trim()) ficha.empresa = empresa.trim();
+    if (etapa) ficha.etapa = etapa;
     if (fechaIngreso) ficha.fechaIngreso = fechaIngreso;
     if (fechaFirma) ficha.fechaFirma = fechaFirma;
     if (costoImpl.trim()) ficha.costoImplementacion = costoImpl.trim();
@@ -71,7 +72,6 @@ export function NewContactDialog({
         email: email.trim() || undefined,
         source,
         notes: servicios.trim() || undefined,
-        stageId: stageId || undefined,
         ficha: Object.keys(ficha).length > 0 ? ficha : undefined,
       }),
     }).catch(() => null);
@@ -186,18 +186,18 @@ export function NewContactDialog({
               </select>
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium" htmlFor="nc-stage">
+              <label className="text-sm font-medium" htmlFor="nc-etapa">
                 Etapa
               </label>
               <select
-                id="nc-stage"
-                value={stageId}
-                onChange={(e) => setStageId(e.target.value)}
+                id="nc-etapa"
+                value={etapa}
+                onChange={(e) => setEtapa(e.target.value)}
                 className="h-9 w-full rounded-md border border-input bg-card px-2 text-sm"
               >
-                {stages.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
+                {ETAPAS.map((et) => (
+                  <option key={et} value={et}>
+                    {et}
                   </option>
                 ))}
               </select>
@@ -289,7 +289,7 @@ export function NewContactDialog({
           </div>
         )}
         {error && <p className="mt-3 text-xs text-danger-text">{error}</p>}
-        {stages.length === 0 && (
+        {!hasStages && (
           <p className="mt-3 text-xs text-warning-text">
             Tu embudo no tiene etapas abiertas. Crea una en el Pipeline antes de
             capturar contactos.
@@ -301,7 +301,7 @@ export function NewContactDialog({
             Cancelar
           </Button>
           <Button
-            disabled={!listo || saving || stages.length === 0}
+            disabled={!listo || saving || !hasStages}
             onClick={() => void guardar()}
           >
             {saving ? "Guardando…" : "Crear contacto"}
