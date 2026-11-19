@@ -10,6 +10,7 @@ import {
   MessageSquareText,
   Search,
   Send,
+  Trash2,
   Upload,
   UserPlus,
   Users,
@@ -37,6 +38,7 @@ export function ContactsClient() {
   const [stages, setStages] = useState<string[]>([]);
   const [showArchived, setShowArchived] = useState(false);
   const [editing, setEditing] = useState<ContactDto | null>(null);
+  const [deleting, setDeleting] = useState<ContactDto | null>(null);
   const [creando, setCreando] = useState(false);
   const [importando, setImportando] = useState(false);
   const [escribiendo, setEscribiendo] = useState<ContactDto | null>(null);
@@ -249,6 +251,16 @@ export function ContactsClient() {
                       <Archive className="h-4 w-4" />
                     )}
                   </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Eliminar contacto"
+                    title="Eliminar contacto"
+                    className="text-destructive hover:text-destructive"
+                    onClick={() => setDeleting(c)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                 </div>
               </li>
             ))}
@@ -263,6 +275,20 @@ export function ContactsClient() {
           onSave={async (patchBody) => {
             await patch(editing.id, patchBody);
             setEditing(null);
+          }}
+        />
+      )}
+
+      {deleting && (
+        <DeleteDialog
+          contact={deleting}
+          onClose={() => setDeleting(null)}
+          onConfirm={async () => {
+            await fetch(`/api/contacts/${deleting.id}`, {
+              method: "DELETE",
+            }).catch(() => null);
+            setDeleting(null);
+            void refetch();
           }}
         />
       )}
@@ -413,6 +439,51 @@ function EditDialog({
             }
           >
             Guardar
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DeleteDialog({
+  contact,
+  onClose,
+  onConfirm,
+}: {
+  contact: ContactDto;
+  onClose: () => void;
+  onConfirm: () => Promise<void>;
+}) {
+  const [loading, setLoading] = useState(false);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-sm rounded-lg border bg-popover p-5 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 className="mb-2 font-semibold">Eliminar contacto</h3>
+        <p className="text-sm text-muted-foreground">
+          ¿Eliminar a <strong>{contact.name}</strong>? Se borrarán también sus
+          conversaciones y mensajes. Esta acción no se puede deshacer.
+        </p>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="ghost" onClick={onClose} disabled={loading}>
+            Cancelar
+          </Button>
+          <Button
+            variant="destructive"
+            disabled={loading}
+            onClick={async () => {
+              setLoading(true);
+              await onConfirm();
+            }}
+          >
+            {loading ? "Eliminando…" : "Eliminar"}
           </Button>
         </div>
       </div>
