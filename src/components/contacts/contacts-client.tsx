@@ -342,6 +342,20 @@ export function ContactsClient() {
             setCreando(false);
             router.push(`/inbox?contact=${contactId}`);
           }}
+          onEditExisting={(contactId) => {
+            setCreando(false);
+            const found = contacts.find((c) => c.id === contactId);
+            if (found) {
+              setEditing(found);
+              return;
+            }
+            void fetch(`/api/contacts/${contactId}`)
+              .then((r) => (r.ok ? r.json() : null))
+              .then((data: { contact: ContactDto } | null) => {
+                if (data?.contact) setEditing(data.contact);
+              })
+              .catch(() => null);
+          }}
         />
       )}
     </div>

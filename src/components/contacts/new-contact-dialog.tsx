@@ -20,10 +20,12 @@ export function NewContactDialog({
   onClose,
   onCreated,
   onOpenExisting,
+  onEditExisting,
 }: {
   onClose: () => void;
   onCreated: () => void;
   onOpenExisting: (contactId: string) => void;
+  onEditExisting?: (contactId: string) => void;
 }) {
   const [name, setName] = useState("");
   const [empresa, setEmpresa] = useState("");
@@ -275,17 +277,26 @@ export function NewContactDialog({
         {duplicado && (
           <div className="mt-3 rounded-md border border-warning-soft bg-warning-tint px-3 py-2.5">
             <p className="text-[13px] text-warning-text">
-              Ese teléfono ya es de <strong>{duplicado.name}</strong>. No se creó
-              un duplicado.
+              Ese teléfono ya es de <strong>{duplicado.name}</strong>. Puedes
+              editar su ficha para actualizar servicios.
             </p>
-            <Button
-              size="sm"
-              variant="secondary"
-              className="mt-2"
-              onClick={() => onOpenExisting(duplicado.id)}
-            >
-              Abrir su conversación
-            </Button>
+            <div className="mt-2 flex gap-2">
+              {onEditExisting && (
+                <Button
+                  size="sm"
+                  onClick={() => onEditExisting(duplicado.id)}
+                >
+                  Editar contacto
+                </Button>
+              )}
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => onOpenExisting(duplicado.id)}
+              >
+                Abrir conversación
+              </Button>
+            </div>
           </div>
         )}
         {error && <p className="mt-3 text-xs text-danger-text">{error}</p>}

@@ -154,7 +154,21 @@ export const POST = withAuth(async (session, req: Request) => {
     })
     .returning();
   if (!inserted[0]) {
-    return apiError(409, "duplicate", "Ya existe un contacto con ese teléfono");
+    const [existing] = await db
+      .select({ id: schema.contact.id, name: schema.contact.name })
+      .from(schema.contact)
+      .where(
+        scoped(schema.contact.organizationId, session.organizationId,
+          eq(schema.contact.waIdentity, phone))
+      )
+      .limit(1);
+    return Response.json(
+      {
+        error: { code: "duplicate", message: "Ya existe un contacto con ese teléfono" },
+        contact: existing ? { id: existing.id, name: existing.name } : undefined,
+      },
+      { status: 409 }
+    );
   }
 
   // Y su lead: un contacto sin lead es invisible en el Pipeline, que es la
