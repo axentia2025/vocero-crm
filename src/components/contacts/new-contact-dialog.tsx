@@ -14,11 +14,6 @@ const SOURCES: { value: SourceValue; label: string }[] = [
   { value: "otro", label: "Otro" },
 ];
 
-/**
- * Alta manual de un prospecto que no llegó por WhatsApp.
- * El teléfono es obligatorio porque ES la identidad en WhatsApp: sin él, el
- * contacto no podría recibir ni mandar nada, y sería una ficha muerta.
- */
 export function NewContactDialog({
   onClose,
   onCreated,
@@ -26,21 +21,23 @@ export function NewContactDialog({
 }: {
   onClose: () => void;
   onCreated: () => void;
-  /** Duplicado: en vez de un error seco, se ofrece ir a quien ya existe. */
   onOpenExisting: (contactId: string) => void;
 }) {
   const [name, setName] = useState("");
+  const [empresa, setEmpresa] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [source, setSource] = useState<SourceValue>("referido");
-  const [notes, setNotes] = useState("");
+  const [servicios, setServicios] = useState("");
   const [stages, setStages] = useState<StageDto[]>([]);
   const [stageId, setStageId] = useState("");
+  const [fechaIngreso, setFechaIngreso] = useState("");
+  const [fechaFirma, setFechaFirma] = useState("");
+  const [costoImpl, setCostoImpl] = useState("");
+  const [costoMensual, setCostoMensual] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [duplicado, setDuplicado] = useState<{ id: string; name: string } | null>(
-    null
-  );
+  const [duplicado, setDuplicado] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => {
     void (async () => {
@@ -57,6 +54,14 @@ export function NewContactDialog({
     setSaving(true);
     setError(null);
     setDuplicado(null);
+
+    const ficha: Record<string, unknown> = {};
+    if (empresa.trim()) ficha.empresa = empresa.trim();
+    if (fechaIngreso) ficha.fechaIngreso = fechaIngreso;
+    if (fechaFirma) ficha.fechaFirma = fechaFirma;
+    if (costoImpl.trim()) ficha.costoImplementacion = costoImpl.trim();
+    if (costoMensual.trim()) ficha.costoMensual = costoMensual.trim();
+
     const res = await fetch("/api/contacts", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -65,8 +70,9 @@ export function NewContactDialog({
         phone: phone.trim(),
         email: email.trim() || undefined,
         source,
-        notes: notes.trim() || undefined,
+        notes: servicios.trim() || undefined,
         stageId: stageId || undefined,
+        ficha: Object.keys(ficha).length > 0 ? ficha : undefined,
       }),
     }).catch(() => null);
     setSaving(false);
@@ -91,8 +97,6 @@ export function NewContactDialog({
     onCreated();
   }
 
-  // 11 dígitos = código de país + número. Ver la nota del endpoint sobre por
-  // qué el código de país no puede faltar ni asumirse.
   const listo = name.trim().length > 0 && phone.replace(/\D/g, "").length >= 11;
 
   return (
@@ -103,57 +107,64 @@ export function NewContactDialog({
       <div
         role="dialog"
         aria-label="Nuevo contacto"
-        className="w-full max-w-md rounded-lg border bg-popover p-5 shadow-xl"
+        className="max-h-[85dvh] w-full max-w-lg overflow-y-auto rounded-lg border bg-popover p-5 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <h3 className="mb-1 font-semibold">Nuevo contacto</h3>
         <p className="mb-4 text-xs text-text-3">
-          Para prospectos que no llegaron por WhatsApp: referidos, gente que te
-          escribió por otra red, conocidos.
+          Registra un prospecto o cliente con toda su información.
         </p>
 
         <div className="space-y-3">
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium" htmlFor="nc-name">
-              Nombre
-            </label>
-            <Input
-              id="nc-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Ferretería La Central"
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium" htmlFor="nc-name">
+                Contacto
+              </label>
+              <Input
+                id="nc-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Juan Pérez"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium" htmlFor="nc-empresa">
+                Empresa
+              </label>
+              <Input
+                id="nc-empresa"
+                value={empresa}
+                onChange={(e) => setEmpresa(e.target.value)}
+                placeholder="Ferretería La Central"
+              />
+            </div>
           </div>
 
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium" htmlFor="nc-phone">
-              Teléfono con código de país
-            </label>
-            <Input
-              id="nc-phone"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="52 555 000 1234"
-            />
-            <p className="text-[11px] text-text-3">
-              Escríbelo con espacios si quieres, pero{" "}
-              <strong>incluye el código de país</strong> (52 para México). Sin
-              él, WhatsApp no lo reconoce como la misma persona que te escriba
-              después.
-            </p>
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium" htmlFor="nc-email">
-              Correo electrónico (opcional)
-            </label>
-            <Input
-              id="nc-email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="correo@ejemplo.com"
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium" htmlFor="nc-phone">
+                Teléfono con código de país
+              </label>
+              <Input
+                id="nc-phone"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="52 555 000 1234"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium" htmlFor="nc-email">
+                Correo electrónico
+              </label>
+              <Input
+                id="nc-email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="correo@ejemplo.com"
+              />
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -176,7 +187,7 @@ export function NewContactDialog({
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium" htmlFor="nc-stage">
-                Etapa inicial
+                Etapa
               </label>
               <select
                 id="nc-stage"
@@ -194,16 +205,70 @@ export function NewContactDialog({
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-sm font-medium" htmlFor="nc-notes">
-              Notas (opcional)
+            <label className="text-sm font-medium" htmlFor="nc-servicios">
+              Servicios Contratados
             </label>
             <Textarea
-              id="nc-notes"
-              rows={3}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Me lo pasó Juan; tiene taller de motos…"
+              id="nc-servicios"
+              rows={2}
+              value={servicios}
+              onChange={(e) => setServicios(e.target.value)}
+              placeholder="CRM + Agente de WhatsApp…"
             />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium" htmlFor="nc-fecha-ingreso">
+                Fecha de Ingreso
+              </label>
+              <Input
+                id="nc-fecha-ingreso"
+                type="date"
+                value={fechaIngreso}
+                onChange={(e) => setFechaIngreso(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium" htmlFor="nc-fecha-firma">
+                Fecha de Firma
+              </label>
+              <Input
+                id="nc-fecha-firma"
+                type="date"
+                value={fechaFirma}
+                onChange={(e) => setFechaFirma(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium" htmlFor="nc-costo-impl">
+                Costo de Implementación
+              </label>
+              <Input
+                id="nc-costo-impl"
+                type="text"
+                inputMode="decimal"
+                value={costoImpl}
+                onChange={(e) => setCostoImpl(e.target.value)}
+                placeholder="$15,000"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium" htmlFor="nc-costo-mensual">
+                Costo Mensual Sin IVA
+              </label>
+              <Input
+                id="nc-costo-mensual"
+                type="text"
+                inputMode="decimal"
+                value={costoMensual}
+                onChange={(e) => setCostoMensual(e.target.value)}
+                placeholder="$3,500"
+              />
+            </div>
           </div>
         </div>
 

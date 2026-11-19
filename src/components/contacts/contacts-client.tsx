@@ -210,6 +210,7 @@ export function ContactsClient() {
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground">
+                    {c.ficha?.empresa ? `${c.ficha.empresa} · ` : ""}
                     {formatPhone(c.phone)}
                     {c.email ? ` · ${c.email}` : ""}
                     {c.notes ? ` · ${c.notes.slice(0, 60)}` : ""}
@@ -354,11 +355,32 @@ function EditDialog({
 }: {
   contact: ContactDto;
   onClose: () => void;
-  onSave: (patch: { name: string; notes: string; email?: string | null; aiPaused?: boolean }) => Promise<void>;
+  onSave: (patch: {
+    name: string;
+    notes: string;
+    email?: string | null;
+    aiPaused?: boolean;
+    ficha?: Record<string, unknown>;
+  }) => Promise<void>;
 }) {
   const [name, setName] = useState(contact.name);
+  const [empresa, setEmpresa] = useState(
+    (contact.ficha?.empresa as string) ?? ""
+  );
   const [email, setEmail] = useState(contact.email ?? "");
-  const [notes, setNotes] = useState(contact.notes ?? "");
+  const [servicios, setServicios] = useState(contact.notes ?? "");
+  const [fechaIngreso, setFechaIngreso] = useState(
+    (contact.ficha?.fechaIngreso as string) ?? ""
+  );
+  const [fechaFirma, setFechaFirma] = useState(
+    (contact.ficha?.fechaFirma as string) ?? ""
+  );
+  const [costoImpl, setCostoImpl] = useState(
+    (contact.ficha?.costoImplementacion as string) ?? ""
+  );
+  const [costoMensual, setCostoMensual] = useState(
+    (contact.ficha?.costoMensual as string) ?? ""
+  );
   const [aiPaused, setAiPaused] = useState(contact.aiPaused ?? false);
 
   return (
@@ -367,20 +389,33 @@ function EditDialog({
       onClick={onClose}
     >
       <div
-        className="max-h-[85dvh] w-full max-w-md overflow-y-auto rounded-lg border bg-popover p-5 shadow-xl"
+        className="max-h-[85dvh] w-full max-w-lg overflow-y-auto rounded-lg border bg-popover p-5 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <h3 className="mb-4 font-semibold">Editar contacto</h3>
         <div className="space-y-3">
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium" htmlFor="edit-name">
-              Nombre
-            </label>
-            <Input
-              id="edit-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium" htmlFor="edit-name">
+                Contacto
+              </label>
+              <Input
+                id="edit-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium" htmlFor="edit-empresa">
+                Empresa
+              </label>
+              <Input
+                id="edit-empresa"
+                value={empresa}
+                onChange={(e) => setEmpresa(e.target.value)}
+                placeholder="Nombre de la empresa"
+              />
+            </div>
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium" htmlFor="edit-email">
@@ -395,17 +430,69 @@ function EditDialog({
             />
           </div>
           <div className="space-y-1.5">
-            <label className="text-sm font-medium" htmlFor="edit-notes">
-              Notas
+            <label className="text-sm font-medium" htmlFor="edit-servicios">
+              Servicios Contratados
             </label>
             <Textarea
-              id="edit-notes"
-              rows={4}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
+              id="edit-servicios"
+              rows={2}
+              value={servicios}
+              onChange={(e) => setServicios(e.target.value)}
+              placeholder="CRM + Agente de WhatsApp…"
             />
           </div>
-          {/* 027 */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium" htmlFor="edit-fecha-ingreso">
+                Fecha de Ingreso
+              </label>
+              <Input
+                id="edit-fecha-ingreso"
+                type="date"
+                value={fechaIngreso}
+                onChange={(e) => setFechaIngreso(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium" htmlFor="edit-fecha-firma">
+                Fecha de Firma
+              </label>
+              <Input
+                id="edit-fecha-firma"
+                type="date"
+                value={fechaFirma}
+                onChange={(e) => setFechaFirma(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium" htmlFor="edit-costo-impl">
+                Costo de Implementación
+              </label>
+              <Input
+                id="edit-costo-impl"
+                type="text"
+                inputMode="decimal"
+                value={costoImpl}
+                onChange={(e) => setCostoImpl(e.target.value)}
+                placeholder="$15,000"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium" htmlFor="edit-costo-mensual">
+                Costo Mensual Sin IVA
+              </label>
+              <Input
+                id="edit-costo-mensual"
+                type="text"
+                inputMode="decimal"
+                value={costoMensual}
+                onChange={(e) => setCostoMensual(e.target.value)}
+                placeholder="$3,500"
+              />
+            </div>
+          </div>
           <label className="flex items-start gap-2 text-sm">
             <input
               type="checkbox"
@@ -427,16 +514,23 @@ function EditDialog({
           </Button>
           <Button
             disabled={!name.trim()}
-            onClick={() =>
+            onClick={() => {
+              const fichaPatch: Record<string, unknown> = {};
+              fichaPatch.empresa = empresa.trim() || null;
+              fichaPatch.fechaIngreso = fechaIngreso || null;
+              fichaPatch.fechaFirma = fechaFirma || null;
+              fichaPatch.costoImplementacion = costoImpl.trim() || null;
+              fichaPatch.costoMensual = costoMensual.trim() || null;
               void onSave({
                 name: name.trim(),
-                notes,
+                notes: servicios,
                 email: email.trim() || null,
-                // Solo si cambió: mandarlo siempre reescribiría el interruptor
-                // de la Bandeja cada vez que alguien corrige un nombre.
-                ...(aiPaused !== (contact.aiPaused ?? false) ? { aiPaused } : {}),
-              })
-            }
+                ficha: fichaPatch,
+                ...(aiPaused !== (contact.aiPaused ?? false)
+                  ? { aiPaused }
+                  : {}),
+              });
+            }}
           >
             Guardar
           </Button>

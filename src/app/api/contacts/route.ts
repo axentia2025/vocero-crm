@@ -118,6 +118,7 @@ const createSchema = z.object({
   source: z.enum(["anuncio", "organico", "referido", "conocido", "otro"]).optional(),
   /** Etapa inicial del lead; si no viene, la primera abierta del tablero. */
   stageId: z.string().min(1).optional(),
+  ficha: z.record(z.unknown()).optional(),
 });
 
 export const POST = withAuth(async (session, req: Request) => {
@@ -138,6 +139,7 @@ export const POST = withAuth(async (session, req: Request) => {
       email: body.data.email ?? null,
       notes: body.data.notes ?? null,
       source: body.data.source ?? null,
+      ficha: body.data.ficha ?? null,
     })
     // El canal entra en el target porque entra en el índice único desde 014
     // (`contact_org_channel_identity_uq`). Postgres exige que el ON CONFLICT
