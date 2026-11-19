@@ -4,6 +4,7 @@ import { newId } from "@/lib/db/ids";
 import { scoped } from "@/lib/db/tenant";
 import type { LossReason, StageChangeSource } from "@/lib/types";
 import { reportStageChange } from "@/server/attribution/conversions";
+import { avisarLibrada } from "./librada";
 
 /**
  * La ÚNICA puerta que escribe `lead.stage_id`.
@@ -59,6 +60,7 @@ export async function moveLeadToStage(input: MoveInput): Promise<MoveResult> {
   // llamada de red dentro de la transacción la mantendría abierta mientras
   // Meta piensa, y una conversión jamás vale una transacción larga.
   let toStageKind: "open" | "won" | "lost" | null = null;
+  let fromStageKind: "open" | "won" | "lost" | null = null;
 
   const result = await db.transaction(async (tx) => {
     const leadRows = await tx
@@ -97,6 +99,7 @@ export async function moveLeadToStage(input: MoveInput): Promise<MoveResult> {
 
     const changed = current.lead.stageId !== target.id;
     toStageKind = target.kind;
+    fromStageKind = current.stage?.kind ?? null;
 
     // El motivo se exige al ENTRAR a la etapa perdida. Reordenar una tarjeta
     // que ya estaba ahí no vuelve a preguntar.
@@ -158,6 +161,14 @@ export async function moveLeadToStage(input: MoveInput): Promise<MoveResult> {
       contactId: result.lead.contactId,
       toStageId: result.lead.stageId,
       toStageKind,
+    });
+  }
+
+  if (result.ok && result.changed && (toStageKind === "won" || fromStageKind === "won")) {
+    await avisarLibrada({
+      organizationId: input.organizationId,
+      contactId: result.lead.contactId,
+      incluirReabierto: true,
     });
   }
 

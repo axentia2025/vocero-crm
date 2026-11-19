@@ -10,6 +10,7 @@ import {
 } from "@/server/contacts";
 import { upsertFicha } from "@/server/bot/ficha";
 import { pauseConversations } from "@/server/contacts-import";
+import { avisarLibrada } from "@/server/leads/librada";
 import { cuentaComoAnuncio } from "@/lib/anuncios";
 import {
   anuncioDelContacto,
@@ -128,6 +129,13 @@ export const PATCH = withAuth(async (session, req: Request, ctx: Params) => {
   // tendría efecto hasta que naciera otra.
   if (body.data.aiPaused !== undefined) {
     await pauseConversations(session.organizationId, [id], body.data.aiPaused);
+  }
+  if (body.data.ficha !== undefined) {
+    await avisarLibrada({
+      organizationId: session.organizationId,
+      contactId: id,
+      incluirReabierto: false,
+    });
   }
   const anuncio = await anuncioDelContacto(session.organizationId, id);
   return Response.json({
