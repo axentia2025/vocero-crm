@@ -33,6 +33,7 @@ import { BookingDrawer, type ActResult } from "./booking-drawer";
 import type { Booking } from "./booking-look";
 import { CalendarToolbar } from "./calendar-toolbar";
 import { MonthGrid } from "./month-grid";
+import { useEquipo } from "@/components/equipo-context";
 import { TimeGrid } from "./time-grid";
 
 /**
@@ -86,6 +87,7 @@ export function BookingsClient({
   timezone: string;
   weeklyHours: WeeklyHours;
 }) {
+  const { propietario } = useEquipo();
   // La vista se resuelve al montar (URL › última usada › tamaño de pantalla):
   // el servidor no sabe si esto es un celular.
   const [view, setView] = useState<CalendarView | null>(null);
@@ -275,6 +277,8 @@ export function BookingsClient({
 
   /** Bloquear: en el hueco tocado o, desde la barra, en la próxima media hora. */
   function openBlock(day?: string, time?: string) {
+    // Bloquear la agenda es del negocio: solo el propietario.
+    if (!propietario) return;
     setSelectedId(null);
     if (day && time) {
       setBlockDraft({ day, time });
@@ -331,7 +335,7 @@ export function BookingsClient({
         onJump={setAnchor}
         onView={changeView}
         onListRange={changeListRange}
-        onBlock={() => openBlock()}
+        onBlock={propietario ? () => openBlock() : undefined}
       />
 
       {/* En escritorio ancho el panel de la cita EMPUJA el calendario en vez

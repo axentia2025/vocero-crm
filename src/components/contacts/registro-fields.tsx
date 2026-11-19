@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import type { ContactDto, StageDto } from "@/lib/types";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { useEquipo } from "@/components/equipo-context";
 
 export type Registro = {
   name: string;
@@ -11,7 +12,8 @@ export type Registro = {
   email: string;
   stageId: string;
   servicios: string;
-  vendedor: string;
+  /** Su vendedor: id de la cuenta del equipo; "" = sin asignar. */
+  ownerUserId: string;
   comision: string;
   fechaIngreso: string;
   fechaFirma: string;
@@ -26,7 +28,7 @@ export const REGISTRO_VACIO: Registro = {
   email: "",
   stageId: "",
   servicios: "",
-  vendedor: "",
+  ownerUserId: "",
   comision: "",
   fechaIngreso: "",
   fechaFirma: "",
@@ -47,7 +49,7 @@ export function registroDesdeContacto(c: ContactDto): Registro {
     email: c.email ?? "",
     stageId: "",
     servicios: texto(f.servicios),
-    vendedor: texto(f.vendedor),
+    ownerUserId: c.owner?.id ?? "",
     comision: texto(f.comision),
     fechaIngreso: texto(f.fechaIngreso),
     fechaFirma: texto(f.fechaFirma),
@@ -57,17 +59,29 @@ export function registroDesdeContacto(c: ContactDto): Registro {
   };
 }
 
-/** Parche de ficha: vacío = `null` para que el servidor borre la clave. */
-export function fichaDelRegistro(r: Registro): Record<string, string | null> {
+/**
+ * Parche de ficha: vacío = `null` para que el servidor borre la clave.
+ *
+ * «Vendedor» no va: lo escribe el servidor desde el dueño del contacto. El
+ * dinero (comisión y montos) solo lo manda quien lo ve; si un integrante lo
+ * mandara vacío, borraría lo que capturó el propietario.
+ */
+export function fichaDelRegistro(
+  r: Registro,
+  montos: boolean
+): Record<string, string | null> {
   return {
     empresa: r.empresa.trim() || null,
     servicios: r.servicios.trim() || null,
-    vendedor: r.vendedor.trim() || null,
-    comision: r.comision.trim() || null,
     fechaIngreso: r.fechaIngreso || null,
     fechaFirma: r.fechaFirma || null,
-    costoImplementacion: r.costoImpl.trim() || null,
-    costoMensual: r.costoMensual.trim() || null,
+    ...(montos
+      ? {
+          comision: r.comision.trim() || null,
+          costoImplementacion: r.costoImpl.trim() || null,
+          costoMensual: r.costoMensual.trim() || null,
+        }
+      : {}),
   };
 }
 
@@ -112,7 +126,6 @@ export function RegistroFields({
   value,
   onChange,
   etapas,
-  vendedores,
   sinTrato = false,
   afterName,
 }: {
@@ -120,11 +133,13 @@ export function RegistroFields({
   value: Registro;
   onChange: (next: Registro) => void;
   etapas: StageDto[] | null;
-  vendedores: string[];
   /** El contacto no tiene trato en el Pipeline: no hay etapa que mover. */
   sinTrato?: boolean;
   afterName?: ReactNode;
 }) {
+  // El propietario asigna el vendedor y captura el dinero; un integrante ve
+  // su propio nombre como vendedor y no ve comisión ni montos.
+  const { propietario, vendedores, yo } = useEquipo();
   const set =
     (k: keyof Registro) =>
     (e: { target: { value: string } }) =>
@@ -202,27 +217,34 @@ export function RegistroFields({
 
       <div className="grid grid-cols-2 gap-3">
         <Campo id={id("vendedor")} label="Vendedor">
-          <Input
-            id={id("vendedor")}
-            list={id("vendedores")}
-            value={value.vendedor}
-            onChange={set("vendedor")}
-            placeholder="Nombre del vendedor"
-          />
-          <datalist id={id("vendedores")}>
-            {vendedores.map((v) => (
-              <option key={v} value={v} />
-            ))}
-          </datalist>
+          {propietario ? (
+            <select
+              id={id("vendedor")}
+              value={value.ownerUserId}
+              onChange={set("ownerUserId")}
+              className={SELECT}
+            >
+              {vendedores.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.name || "Sin nombre"}
+                </option>
+              ))}
+              <option value="">Sin asignar</option>
+            </select>
+          ) : (
+            <Input id={id("vendedor")} value={yo.name} disabled readOnly />
+          )}
         </Campo>
-        <Campo id={id("comision")} label="Comisión">
-          <Input
-            id={id("comision")}
-            value={value.comision}
-            onChange={set("comision")}
-            placeholder="10% o $1,500"
-          />
-        </Campo>
+        {propietario && (
+          <Campo id={id("comision")} label="Comisión">
+            <Input
+              id={id("comision")}
+              value={value.comision}
+              onChange={set("comision")}
+              placeholder="30% impl. / 20% mensual"
+            />
+          </Campo>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-3">
@@ -244,30 +266,34 @@ export function RegistroFields({
         </Campo>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <Campo id={id("costo-impl")} label="Costo de implementación">
-          <Input
-            id={id("costo-impl")}
-            inputMode="decimal"
-            value={value.costoImpl}
-            onChange={set("costoImpl")}
-            placeholder="$15,000"
-          />
-        </Campo>
-        <Campo id={id("costo-mensual")} label="Costo mensual sin IVA">
-          <Input
-            id={id("costo-mensual")}
-            inputMode="decimal"
-            value={value.costoMensual}
-            onChange={set("costoMensual")}
-            placeholder="$3,500"
-          />
-        </Campo>
-      </div>
-      <p className="-mt-1 text-[11px] text-text-3">
-        El costo de implementación es el monto del trato en el Pipeline y en
-        Resultados.
-      </p>
+      {propietario && (
+        <>
+          <div className="grid grid-cols-2 gap-3">
+            <Campo id={id("costo-impl")} label="Costo de implementación">
+              <Input
+                id={id("costo-impl")}
+                inputMode="decimal"
+                value={value.costoImpl}
+                onChange={set("costoImpl")}
+                placeholder="$15,000"
+              />
+            </Campo>
+            <Campo id={id("costo-mensual")} label="Costo mensual sin IVA">
+              <Input
+                id={id("costo-mensual")}
+                inputMode="decimal"
+                value={value.costoMensual}
+                onChange={set("costoMensual")}
+                placeholder="$3,500"
+              />
+            </Campo>
+          </div>
+          <p className="-mt-1 text-[11px] text-text-3">
+            El costo de implementación es el monto del trato en el Pipeline y en
+            Resultados.
+          </p>
+        </>
+      )}
 
       <Campo id={id("notas")} label="Notas">
         <Textarea

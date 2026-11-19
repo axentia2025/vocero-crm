@@ -12,6 +12,13 @@ import { BotSection } from "./bot-section";
 import { HygieneSection } from "./hygiene-section";
 import { defaultRange, RangePicker, type Range } from "./range-picker";
 import { SalesSection } from "./sales-section";
+import { useEquipo } from "@/components/equipo-context";
+import {
+  useFiltroVendedor,
+  VendedorFiltro,
+  vendedorParam,
+} from "@/components/equipo/vendedor-filtro";
+import { VENDEDOR_TODOS } from "@/lib/equipo";
 
 type Block<T> = { data: T | null; loading: boolean; error: string | null };
 
@@ -73,6 +80,13 @@ export function ResultsClient({
   timezone: string;
 }) {
   const [range, setRange] = useState<Range>(() => defaultRange(today));
+  // Ventas y pendientes se filtran por vendedor. Anuncios y el agente son de
+  // la línea de WhatsApp del negocio, no de un vendedor: se enseñan solo al
+  // propietario y solo con todo el equipo a la vista.
+  const { propietario } = useEquipo();
+  const [vendedor, setVendedor] = useFiltroVendedor();
+  const deLaLinea = propietario && vendedor === VENDEDOR_TODOS;
+  const porVendedor = vendedorParam(vendedor);
   const [sales, setSales] = useState<Block<SalesBlockDto>>(inicial);
   const [ads, setAds] = useState<Block<AdsBlockDto>>(inicial);
   const [bot, setBot] = useState<Block<BotBlockDto>>(inicial);
@@ -81,18 +95,28 @@ export function ResultsClient({
   useEffect(() => {
     const ctl = new AbortController();
     const q = `from=${range.from}&to=${range.to}`;
-    void cargar(`/api/analytics/sales?${q}`, setSales, ctl.signal);
-    void cargar(`/api/analytics/ads?${q}`, setAds, ctl.signal);
-    void cargar(`/api/analytics/bot?${q}`, setBot, ctl.signal);
+    void cargar(
+      `/api/analytics/sales?${q}${porVendedor ? `&${porVendedor}` : ""}`,
+      setSales,
+      ctl.signal
+    );
+    if (deLaLinea) {
+      void cargar(`/api/analytics/ads?${q}`, setAds, ctl.signal);
+      void cargar(`/api/analytics/bot?${q}`, setBot, ctl.signal);
+    }
     return () => ctl.abort();
-  }, [range]);
+  }, [range, porVendedor, deLaLinea]);
 
   // La higiene describe el AHORA: no depende del rango elegido.
   useEffect(() => {
     const ctl = new AbortController();
-    void cargar("/api/analytics/hygiene", setHygiene, ctl.signal);
+    void cargar(
+      `/api/analytics/hygiene${porVendedor ? `?${porVendedor}` : ""}`,
+      setHygiene,
+      ctl.signal
+    );
     return () => ctl.abort();
-  }, []);
+  }, [porVendedor]);
 
   return (
     <div className="flex h-full flex-col">
@@ -100,16 +124,23 @@ export function ResultsClient({
         <div className="min-w-0">
           <h2 className="text-[17px] font-bold tracking-tight">Resultados</h2>
           <p className="text-xs text-text-3">
-            Ventas, el trabajo del agente, de dónde llegan y qué se está cayendo.
+            {deLaLinea
+              ? "Ventas, el trabajo del agente, de dónde llegan y qué se está cayendo."
+              : propietario
+                ? "Ventas y pendientes del vendedor elegido."
+                : "Tus prospectos, tus cierres y lo que se está enfriando."}
           </p>
         </div>
-        <RangePicker value={range} onChange={setRange} today={today} timezone={timezone} />
+        <div className="flex flex-wrap items-center gap-2">
+          <VendedorFiltro value={vendedor} onChange={setVendedor} />
+          <RangePicker value={range} onChange={setRange} today={today} timezone={timezone} />
+        </div>
       </header>
 
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-3 sm:p-6">
         <SalesSection {...sales} currency={currency} />
-        <AdsSection {...ads} />
-        <BotSection {...bot} agenda={agenda} />
+        {deLaLinea && <AdsSection {...ads} />}
+        {deLaLinea && <BotSection {...bot} agenda={agenda} />}
         <HygieneSection {...hygiene} currency={currency} />
       </div>
     </div>

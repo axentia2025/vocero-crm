@@ -11,6 +11,7 @@ import { enabledChannels } from "@/server/channels/enabled";
 import { navKicker } from "@/lib/channels";
 import { avisoIaDe } from "@/server/ai/aviso";
 import { AvisoIaBanner } from "@/components/avisos/aviso-ia";
+import { equipoDe } from "@/server/equipo/acceso";
 
 export default async function AppLayout({
   children,
@@ -28,6 +29,8 @@ export default async function AppLayout({
   // bot roto. Se resuelve en el servidor y en el layout para que se vea desde
   // CUALQUIER pantalla, no solo desde el panel de un contacto (#85).
   const aviso = await avisoIaDe(session.organizationId);
+  // Quién mira y con quién vende: cada pantalla decide con esto qué enseña.
+  const equipo = await equipoDe(session);
 
   return (
     <AppShell
@@ -45,6 +48,7 @@ export default async function AppLayout({
       agenda={agendaEnabled()}
       kicker={navKicker([...enabledChannels()])}
       aviso={<AvisoIaBanner aviso={aviso} />}
+      equipo={equipo}
     >
       {children}
     </AppShell>

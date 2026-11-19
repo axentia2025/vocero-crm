@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { parseBody, withAuth } from "@/lib/api";
+import { apiError, parseBody, withAuth } from "@/lib/api";
+import { citaVisible } from "@/server/equipo/acceso";
 import { agendaDisabledResponse, agendaEnabled } from "@/server/agenda/flag";
 import {
   cancelBooking,
@@ -32,6 +33,11 @@ export const PATCH = withAuth(async (session, req: Request, ctx: Params) => {
   const { id } = await ctx.params;
   const body = await parseBody(req, patchSchema);
   if (!body.ok) return body.response;
+  // La cita de otro vendedor (o un bloqueo del negocio), para un integrante,
+  // no existe.
+  if (!(await citaVisible(session, id))) {
+    return apiError(404, "not_found", "Cita no encontrada");
+  }
 
   try {
     switch (body.data.action) {

@@ -4,6 +4,8 @@ import { scoped } from "@/lib/db/tenant";
 import { sumable } from "@/lib/money";
 import type { HygieneBlockDto } from "@/lib/analytics";
 import { notLabContact } from "@/server/analytics/shared";
+import type { FiltroVendedor } from "@/lib/equipo";
+import { condicionContacto, condicionPorContacto } from "@/server/equipo/acceso";
 
 /**
  * 019 — Bloque de higiene.
@@ -21,12 +23,14 @@ export const MAX_SILENCIOSOS = 50;
 export async function hygieneBlock(
   organizationId: string,
   businessCurrency: string,
-  now: Date = new Date()
+  now: Date = new Date(),
+  /** De quién son los contactos que se revisan (ver `server/equipo/acceso`). */
+  vendedor: FiltroVendedor = { tipo: "todos" }
 ): Promise<HygieneBlockDto> {
   const [silencio, failedMessages, closingWindows] = await Promise.all([
-    leadsEnSilencio(organizationId, businessCurrency, now),
-    mensajesFallidos(organizationId, now),
-    ventanasPorVencer(organizationId, now),
+    leadsEnSilencio(organizationId, businessCurrency, now, vendedor),
+    mensajesFallidos(organizationId, now, vendedor),
+    ventanasPorVencer(organizationId, now, vendedor),
   ]);
 
   return {
@@ -53,7 +57,12 @@ export async function hygieneBlock(
  * El total y el dinero salen de funciones de ventana, que se calculan ANTES
  * del límite: la lista se corta en 50, los números no.
  */
-async function leadsEnSilencio(organizationId: string, businessCurrency: string, now: Date) {
+async function leadsEnSilencio(
+  organizationId: string,
+  businessCurrency: string,
+  now: Date,
+  vendedor: FiltroVendedor
+) {
   const corte = new Date(now.getTime() - SILENCIO_DIAS * 86_400_000);
   // `mapWith`: un timestamp en SQL crudo llega como texto SIN zona, y
   // `new Date()` lo leería en la hora local del servidor. El mapeador de la
@@ -90,6 +99,7 @@ async function leadsEnSilencio(organizationId: string, businessCurrency: string,
         eq(schema.pipelineStage.kind, "open"),
         isNull(schema.contact.archivedAt),
         notLabContact(schema.lead.contactId),
+        condicionContacto(vendedor),
         // El instante va como texto con cast explícito: dentro de un
         // `coalesce` el tipo del parámetro es desconocido y el driver no sabe
         // serializar un Date contra "unknown".
@@ -121,7 +131,7 @@ async function leadsEnSilencio(organizationId: string, businessCurrency: string,
 }
 
 /** Salientes que no llegaron en los últimos 30 días, por motivo. */
-async function mensajesFallidos(organizationId: string, now: Date) {
+async function mensajesFallidos(organizationId: string, now: Date, vendedor: FiltroVendedor) {
   const desde = new Date(now.getTime() - 30 * 86_400_000);
 
   const rows = await getDb()
@@ -145,7 +155,8 @@ async function mensajesFallidos(organizationId: string, now: Date) {
         schema.message.organizationId,
         organizationId,
         eq(schema.message.status, "failed"),
-        gt(schema.message.createdAt, desde)
+        gt(schema.message.createdAt, desde),
+        condicionPorContacto(vendedor, schema.conversation.contactId)
       )
     )
     .groupBy(schema.message.error)
@@ -166,7 +177,7 @@ async function mensajesFallidos(organizationId: string, now: Date) {
  * Pasada esa ventana solo se puede escribir con plantilla: es la diferencia
  * entre responder gratis y gastar una.
  */
-async function ventanasPorVencer(organizationId: string, now: Date) {
+async function ventanasPorVencer(organizationId: string, now: Date, vendedor: FiltroVendedor) {
   const limite = new Date(now.getTime() - 20 * 3_600_000);
   const vencida = new Date(now.getTime() - 24 * 3_600_000);
 
@@ -188,7 +199,8 @@ async function ventanasPorVencer(organizationId: string, now: Date) {
         lt(schema.conversation.lastInboundAt, limite),
         gt(schema.conversation.lastInboundAt, vencida),
         // Sin respuesta nuestra posterior a lo último que dijo el cliente.
-        sql`(${schema.conversation.lastMessageAt} is null or ${schema.conversation.lastMessageAt} <= ${schema.conversation.lastInboundAt})`
+        sql`(${schema.conversation.lastMessageAt} is null or ${schema.conversation.lastMessageAt} <= ${schema.conversation.lastInboundAt})`,
+        condicionContacto(vendedor)
       )
     )
     // La que se cierra primero, arriba.

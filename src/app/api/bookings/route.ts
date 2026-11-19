@@ -6,6 +6,13 @@ import { listBookings, listBookingsInRange } from "@/server/agenda/queries";
 import { getSettings } from "@/server/agenda/settings";
 import { createBlock, createSessionBooking } from "@/server/agenda/service";
 import { bookingErrorResponse, bookingPayload } from "@/server/agenda/http";
+import { filtroVendedor, veTodo } from "@/lib/equipo";
+import {
+  condicionPorContacto,
+  contactoVisible,
+  conversacionVisible,
+} from "@/server/equipo/acceso";
+import { schema } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -25,8 +32,14 @@ export const GET = withAuth(async (session, req: Request) => {
   const url = new URL(req.url);
   const query = parseRangeQuery(url.searchParams.get("from"), url.searchParams.get("to"));
   if (!query.ok) return apiError(422, "invalid_range", query.message);
+  // Un integrante ve solo las citas de sus contactos (los bloqueos de agenda
+  // no tienen contacto: son del negocio).
+  const deQuien = condicionPorContacto(
+    filtroVendedor(session, url.searchParams.get("vendedor")),
+    schema.booking.contactId
+  );
   if (!query.range) {
-    const bookings = await listBookings(session.organizationId);
+    const bookings = await listBookings(session.organizationId, undefined, deQuien);
     return Response.json({ bookings });
   }
 
@@ -34,7 +47,8 @@ export const GET = withAuth(async (session, req: Request) => {
   const { bookings, truncated } = await listBookingsInRange(
     session.organizationId,
     query.range,
-    settings
+    settings,
+    deQuien
   );
   return Response.json({
     bookings,
@@ -75,6 +89,18 @@ export const POST = withAuth(async (session, req: Request) => {
   if (!agendaEnabled()) return agendaDisabledResponse();
   const body = await parseBody(req, postSchema);
   if (!body.ok) return body.response;
+
+  // Un bloqueo es la agenda del negocio; una cita, solo con un contacto suyo.
+  if (body.data.kind === "block" && !veTodo(session.role)) {
+    return apiError(403, "forbidden", "Los bloqueos de agenda los pone el propietario");
+  }
+  if (body.data.kind === "session") {
+    const { contactId, conversationId } = body.data;
+    const visible =
+      (await contactoVisible(session, contactId)) &&
+      (!conversationId || (await conversacionVisible(session, conversationId)));
+    if (!visible) return apiError(404, "not_found", "Contacto no encontrado");
+  }
 
   try {
     if (body.data.kind === "block") {

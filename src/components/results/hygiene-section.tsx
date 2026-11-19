@@ -50,7 +50,7 @@ export function HygieneSection({
                   <span className="ml-1.5 font-normal text-text-3">({data.silentCount})</span>
                 )}
               </Subhead>
-              {data.silentAmountCents > 0 && (
+              {!data.montosOcultos && data.silentAmountCents > 0 && (
                 <p className="-mt-1 mb-2 text-xs text-text-3">
                   {money(data.silentAmountCents)} en tratos que se enfrían
                 </p>
@@ -70,7 +70,7 @@ export function HygieneSection({
                         </Link>
                         <span className="shrink-0 text-xs text-text-3 tabular-nums">
                           {l.days} días
-                          {l.amountCents ? ` · ${money(l.amountCents)}` : ""}
+                          {!data.montosOcultos && l.amountCents ? ` · ${money(l.amountCents)}` : ""}
                         </span>
                       </li>
                     ))}

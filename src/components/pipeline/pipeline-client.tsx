@@ -25,6 +25,13 @@ import { LossReasonDialog } from "./loss-reason-dialog";
 import { AmountDialog } from "./amount-dialog";
 import { PriorityBadge } from "./priority-picker";
 import { LeadDrawer } from "./lead-drawer";
+import { useEquipo } from "@/components/equipo-context";
+import {
+  useFiltroVendedor,
+  VendedorFiltro,
+  vendedorParam,
+} from "@/components/equipo/vendedor-filtro";
+import { VENDEDOR_TODOS } from "@/lib/equipo";
 
 export type BoardLead = {
   id: string;
@@ -36,9 +43,18 @@ export type BoardLead = {
   amountCents: number | null;
   currency: string | null;
   priority: PriorityValue | null;
+  /** Su vendedor; null = sin asignar. */
+  owner?: { id: string; name: string } | null;
 };
 
 export function PipelineClient() {
+  // El propietario ve todo el embudo (o el de un vendedor), con montos, y
+  // arma las etapas. Un integrante ve solo sus tratos, sin dinero.
+  const { propietario } = useEquipo();
+  const [vendedor, setVendedor] = useFiltroVendedor();
+  const montos = propietario;
+  // Con todos a la vista, cada tarjeta dice de quién es.
+  const verDueno = propietario && vendedor === VENDEDOR_TODOS;
   const [stages, setStages] = useState<StageDto[]>([]);
   const [currency, setCurrency] = useState("MXN");
   const [leads, setLeads] = useState<BoardLead[]>([]);
@@ -65,7 +81,10 @@ export function PipelineClient() {
   );
 
   const refetch = useCallback(async () => {
-    const res = await fetch("/api/pipeline/board").catch(() => null);
+    const porVendedor = vendedorParam(vendedor);
+    const res = await fetch(
+      `/api/pipeline/board${porVendedor ? `?${porVendedor}` : ""}`
+    ).catch(() => null);
     if (!res?.ok) return;
     const data = (await res.json()) as {
       stages: StageDto[];
@@ -75,7 +94,7 @@ export function PipelineClient() {
     if (data.currency) setCurrency(data.currency);
     setStages(data.stages);
     setLeads(data.leads);
-  }, []);
+  }, [vendedor]);
 
   useEffect(() => {
     void refetch();
@@ -174,9 +193,15 @@ export function PipelineClient() {
     <div className="flex h-full flex-col">
       <header className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3 sm:px-6 sm:py-4">
         <h2 className="text-[17px] font-bold tracking-tight">Pipeline</h2>
-        <Button variant="outline" size="sm" onClick={() => setManaging(true)}>
-          <Settings2 className="h-4 w-4" /> Gestionar etapas
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <VendedorFiltro value={vendedor} onChange={setVendedor} />
+          {/* Las etapas son el embudo de todo el negocio: las arma el propietario. */}
+          {propietario && (
+            <Button variant="outline" size="sm" onClick={() => setManaging(true)}>
+              <Settings2 className="h-4 w-4" /> Gestionar etapas
+            </Button>
+          )}
+        </div>
       </header>
 
       {/* El tablero se arrastra en horizontal; en el teléfono cada columna
@@ -193,7 +218,8 @@ export function PipelineClient() {
                 key={stage.id}
                 stage={stage}
                 currency={currency}
-                onEditAmount={setEditandoMonto}
+                onEditAmount={montos ? setEditandoMonto : undefined}
+                verDueno={verDueno}
                 onOpen={(l) => setAbiertoId(l.id)}
                 leads={leads
                   .filter((l) => l.stageId === stage.id)
@@ -203,13 +229,13 @@ export function PipelineClient() {
           </div>
           <DragOverlay>
             {activeLead ? (
-              <LeadCard lead={activeLead} currency={currency} overlay />
+              <LeadCard lead={activeLead} currency={currency} overlay verDueno={verDueno} />
             ) : null}
           </DragOverlay>
         </DndContext>
       </div>
 
-      {managing && (
+      {managing && propietario && (
         <StageManager
           stages={stages}
           onClose={() => setManaging(false)}
@@ -226,12 +252,12 @@ export function PipelineClient() {
           currency={currency}
           onClose={() => setAbiertoId(null)}
           onMoveStage={(stageId) => moverDesdeCajon(abierto.id, stageId)}
-          onAmount={(cents) => void guardarMonto(abierto.id, cents)}
+          onAmount={montos ? (cents) => void guardarMonto(abierto.id, cents) : undefined}
           onPriority={(p) => void guardarPrioridad(abierto.id, p)}
         />
       )}
 
-      {editandoMonto && (
+      {editandoMonto && montos && (
         <AmountDialog
           leadName={editandoMonto.contact.name}
           currency={editandoMonto.currency ?? currency}
@@ -294,12 +320,15 @@ function StageColumn({
   leads,
   currency,
   onEditAmount,
+  verDueno,
   onOpen,
 }: {
   stage: StageDto;
   leads: BoardLead[];
   currency: string;
-  onEditAmount: (lead: BoardLead) => void;
+  /** Sin él no hay montos: ni en la tarjeta ni en el total de la columna. */
+  onEditAmount?: (lead: BoardLead) => void;
+  verDueno: boolean;
   onOpen: (lead: BoardLead) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
@@ -330,11 +359,12 @@ function StageColumn({
             lead={lead}
             currency={currency}
             onEditAmount={onEditAmount}
+            verDueno={verDueno}
             onOpen={onOpen}
           />
         ))}
       </div>
-      <StageFooter leads={leads} currency={currency} />
+      {onEditAmount && <StageFooter leads={leads} currency={currency} />}
     </div>
   );
 }
@@ -374,11 +404,13 @@ function DraggableLead({
   lead,
   currency,
   onEditAmount,
+  verDueno,
   onOpen,
 }: {
   lead: BoardLead;
   currency: string;
-  onEditAmount: (lead: BoardLead) => void;
+  onEditAmount?: (lead: BoardLead) => void;
+  verDueno: boolean;
   onOpen: (lead: BoardLead) => void;
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
@@ -406,7 +438,12 @@ function DraggableLead({
       aria-label={`Abrir el trato de ${lead.contact.name}`}
       className={cn(isDragging && "opacity-40")}
     >
-      <LeadCard lead={lead} currency={currency} onEditAmount={onEditAmount} />
+      <LeadCard
+        lead={lead}
+        currency={currency}
+        onEditAmount={onEditAmount}
+        verDueno={verDueno}
+      />
     </div>
   );
 }
@@ -416,11 +453,14 @@ function LeadCard({
   currency,
   overlay = false,
   onEditAmount,
+  verDueno = false,
 }: {
   lead: BoardLead;
   currency: string;
   overlay?: boolean;
   onEditAmount?: (lead: BoardLead) => void;
+  /** Pinta de quién es el trato (el propietario mirando a todo el equipo). */
+  verDueno?: boolean;
 }) {
   return (
     <div
@@ -441,6 +481,11 @@ function LeadCard({
               ? `Actividad: ${formatTime(lead.lastActivityAt)}`
               : "Sin actividad"}
           </p>
+          {verDueno && (
+            <p className="truncate text-[11px] text-text-3">
+              {lead.owner?.name ? `Vendedor: ${lead.owner.name}` : "Sin asignar"}
+            </p>
+          )}
         </div>
         {lead.conversationId && (
           <Link

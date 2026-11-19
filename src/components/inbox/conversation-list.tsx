@@ -15,6 +15,7 @@ import { emptyInboxDescription, formatTime, previewText } from "./helpers";
 import { EVENTO_BORRADOR, leerBorrador } from "@/lib/borradores";
 import { atajoBandeja, esCampoDeTexto, sirveEscribiendo, vecina } from "@/lib/atajos";
 import { hayDialogoAbierto } from "@/components/atajos-globales";
+import { useEquipo } from "@/components/equipo-context";
 import { etiquetaVence, porVencer } from "@/lib/filtros-bandeja";
 
 /* Puntos de etapa: los tokens del tema, no hex copiados del tema claro —
@@ -47,6 +48,9 @@ function InboxEmptyState({
 }) {
   const [seeding, setSeeding] = useState(false);
   const [failed, setFailed] = useState(false);
+  // La demo llena la base del negocio: es del propietario. Un integrante ve
+  // aquí las conversaciones de los contactos que registra.
+  const { propietario } = useEquipo();
 
   async function seed() {
     setSeeding(true);
@@ -63,8 +67,13 @@ function InboxEmptyState({
       icon={Inbox}
       className="h-full"
       title="Sin conversaciones todavía"
-      description={emptyInboxDescription(channels.map((ch) => CHANNEL_LABEL[ch]))}
+      description={
+        propietario
+          ? emptyInboxDescription(channels.map((ch) => CHANNEL_LABEL[ch]))
+          : "Aquí aparecen las conversaciones de WhatsApp de tus contactos con la línea del negocio."
+      }
       action={
+        propietario &&
         !failed && (
           <Button
             size="sm"

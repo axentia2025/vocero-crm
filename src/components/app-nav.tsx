@@ -10,7 +10,7 @@ import { limpiarBorradores } from "@/lib/borradores";
 import type { Branding } from "@/lib/branding";
 import type { ThemePreference } from "@/lib/theme";
 import { cn, initials } from "@/lib/utils";
-import { appNavGroups, isNavActive, SETTINGS_ITEM, type NavItem } from "@/lib/nav";
+import { appNavGroups, isNavActive, muestraAjustes, SETTINGS_ITEM, type NavItem } from "@/lib/nav";
 import { signOut } from "@/lib/auth/client";
 import { useEvents } from "@/components/use-events";
 import {
@@ -247,8 +247,9 @@ export function AppNav({
       <BotonActivarAvisos className={navItemClass(false)} />
       <BotonInstalar className={navItemClass(false)} />
 
-      {/* Ajustes va abajo, solo: no es trabajo del día. */}
-      {renderItem(SETTINGS_ITEM)}
+      {/* Ajustes va abajo, solo: no es trabajo del día. Solo para quien
+          configura: un integrante del equipo no tiene nada que ajustar. */}
+      {muestraAjustes(role) && renderItem(SETTINGS_ITEM)}
 
       <div className="mt-1 flex items-center gap-2.5 rounded-sm px-2.5 py-2 hover:bg-accent">
         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-soft text-xs font-bold text-brand-text">
@@ -257,7 +258,7 @@ export function AppNav({
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[13px] font-semibold">{userName}</span>
           <span className="block truncate text-[11px] text-text-3">
-            {role === "owner" ? "Propietario" : "Equipo"} · En línea
+            {role === "owner" ? "Propietario" : "Equipo de ventas"} · En línea
           </span>
         </span>
         <span className="flex shrink-0 items-center">

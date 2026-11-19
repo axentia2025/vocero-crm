@@ -268,7 +268,7 @@
       "Perfil": {
         "type": "object",
         "properties": {
-          "profile": { "type": "object", "properties": { "name": { "type": "string" }, "tone": { "type": ["string", "null"] }, "instructions": { "type": ["string", "null"] }, "escalationRules": { "type": ["string", "null"] }, "greeting": { "type": ["string", "null"] }, "role": { "type": "string", "description": "034 — El rol del agente.", "examples": ["calificador"] }, "tools": { "type": "array", "description": "034 — Las herramientas encendidas. `escalar` siempre. Sin la llave, enciende todas.", "items": { "type": "string", "enum": ["ficha", "etapa", "agendar", "reprogramar", "salida", "escalar"] } } } },
+          "profile": { "type": "object", "properties": { "name": { "type": "string" }, "tone": { "type": ["string", "null"] }, "instructions": { "type": ["string", "null"] }, "escalationRules": { "type": ["string", "null"] }, "greeting": { "type": ["string", "null"] }, "role": { "type": "string", "description": "034 — El rol del agente.", "examples": ["calificador"] }, "tools": { "type": "array", "description": "034 — Las herramientas encendidas. `escalar` siempre. Sin la llave, enciende todas.", "items": { "type": "string", "enum": ["ficha", "crear_contacto", "etapa", "agendar", "reprogramar", "salida", "escalar"] } } } },
           "kb": { "type": "string" },
           "resources": { "type": "array", "items": { "type": "object", "properties": { "label": { "type": "string" }, "url": { "type": "string" } } } },
           "llm": {

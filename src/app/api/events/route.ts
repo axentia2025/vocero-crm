@@ -1,5 +1,8 @@
 import { requireSession, UnauthorizedError } from "@/lib/auth/session";
-import { subscribe } from "@/server/events/bus";
+import { subscribe, type SseEvent } from "@/server/events/bus";
+import { veTodo } from "@/lib/equipo";
+import { citaVisible, conversacionVisible } from "@/server/equipo/acceso";
+import { crearFiltroDeEventos } from "@/server/equipo/eventos";
 
 /**
  * Canal SSE de la bandeja (contrato sse.md).
@@ -22,6 +25,15 @@ export async function GET(req: Request) {
     throw err;
   }
   const { organizationId } = session;
+  const quien = session;
+  // Un integrante del equipo solo recibe avisos de SUS contactos (ver
+  // server/equipo/eventos.ts); al propietario le llega todo, como siempre.
+  const filtro = veTodo(session.role)
+    ? null
+    : crearFiltroDeEventos({
+        conversacion: (id) => conversacionVisible(quien, id),
+        cita: (id) => citaVisible(quien, id),
+      });
 
   let cleanup: (() => void) | null = null;
 
@@ -37,12 +49,21 @@ export async function GET(req: Request) {
 
       send(`: conectado\n\n`);
 
-      const unsubscribe = subscribe(organizationId, (event) => {
+      const emitir = (event: SseEvent) =>
         send(
           `event: ${event.type}\n` +
             `id: ${Date.now()}\n` +
             `data: ${JSON.stringify(event.data)}\n\n`
         );
+      // La revisión es asíncrona: se encadena para que los avisos salgan en
+      // el orden en que se publicaron (un «estado» no puede llegar antes que
+      // su «mensaje nuevo»).
+      let cola: Promise<void> = Promise.resolve();
+      const unsubscribe = subscribe(organizationId, (event) => {
+        if (!filtro) return emitir(event);
+        cola = cola.then(async () => {
+          if (await filtro(event)) emitir(event);
+        });
       });
 
       const heartbeat = setInterval(() => send(`: ping\n\n`), HEARTBEAT_MS);

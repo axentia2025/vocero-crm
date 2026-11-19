@@ -6,6 +6,8 @@ import { scoped } from "@/lib/db/tenant";
 import { publish } from "@/server/events/bus";
 import { moveLeadToStage } from "@/server/leads/stage-history";
 import { getBranding } from "@/server/branding";
+import { veTodo } from "@/lib/equipo";
+import { leadVisible } from "@/server/equipo/acceso";
 
 export const dynamic = "force-dynamic";
 
@@ -52,6 +54,19 @@ export const PATCH = withAuth(async (session, req: Request, ctx: Params) => {
   const body = await parseBody(req, patchSchema);
   if (!body.ok) return body.response;
 
+  // El trato de otro vendedor, para un integrante, no existe.
+  if (!(await leadVisible(session, id))) {
+    return apiError(404, "not_found", "Lead no encontrado");
+  }
+  // El monto del trato es el costo de implementación: lo captura el
+  // propietario, igual que la comisión y la mensualidad.
+  if (
+    !veTodo(session.role) &&
+    (body.data.amountCents !== undefined || body.data.currency !== undefined)
+  ) {
+    return apiError(403, "forbidden", "Los montos los captura el propietario");
+  }
+
   // El monto viaja en el MISMO update que el movimiento: capturarlo mientras
   // se arrastra la tarjeta no debe costar dos viajes ni dejar un estado a
   // medias si el segundo falla.
@@ -93,7 +108,7 @@ export const PATCH = withAuth(async (session, req: Request, ctx: Params) => {
       )
       .returning();
     if (!updated[0]) return apiError(404, "not_found", "Lead no encontrado");
-    return Response.json({ lead: updated[0] });
+    return Response.json({ lead: leadParaRol(updated[0], session.role) });
   }
 
   const res = await moveLeadToStage({
@@ -145,5 +160,13 @@ export const PATCH = withAuth(async (session, req: Request, ctx: Params) => {
     });
   }
 
-  return Response.json({ lead: res.lead });
+  return Response.json({ lead: leadParaRol(res.lead, session.role) });
 });
+
+/** El lead de respuesta, sin el monto para quien no lo ve. */
+function leadParaRol<T extends { amountCents: number | null; currency: string | null }>(
+  lead: T,
+  role: string
+): T {
+  return veTodo(role) ? lead : { ...lead, amountCents: null, currency: null };
+}

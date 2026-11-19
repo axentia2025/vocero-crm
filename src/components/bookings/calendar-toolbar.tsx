@@ -50,7 +50,8 @@ export function CalendarToolbar({
   onJump: (day: string) => void;
   onView: (view: CalendarView) => void;
   onListRange: (from: string, to: string) => void;
-  onBlock: () => void;
+  /** Sin él (un integrante del equipo) no se ofrece bloquear horario. */
+  onBlock?: () => void;
 }) {
   const picker = useRef<HTMLInputElement>(null);
 
@@ -150,10 +151,12 @@ export function CalendarToolbar({
             </button>
           ))}
         </div>
-        <Button size="sm" onClick={onBlock} aria-label="Bloquear horario">
+        {onBlock && (
+          <Button size="sm" onClick={onBlock} aria-label="Bloquear horario">
           <Plus className="h-4 w-4" />
           <span className="hidden sm:inline">Bloquear horario</span>
         </Button>
+        )}
       </div>
     </header>
   );

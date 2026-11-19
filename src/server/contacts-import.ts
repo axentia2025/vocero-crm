@@ -39,7 +39,8 @@ export type ImportResult = {
 export async function importContacts(
   organizationId: string,
   rows: ImportRow[],
-  opts: { aiPaused: boolean }
+  /** `ownerUserId`: quién queda como su vendedor (quien importa). */
+  opts: { aiPaused: boolean; ownerUserId?: string | null }
 ): Promise<ImportResult> {
   const db = getDb();
   let created = 0;
@@ -91,6 +92,7 @@ export async function importContacts(
             phone: r.phone,
             waIdentity: r.phone,
             aiPaused: opts.aiPaused,
+            ownerUserId: opts.ownerUserId ?? null,
           }))
         )
         .onConflictDoNothing({

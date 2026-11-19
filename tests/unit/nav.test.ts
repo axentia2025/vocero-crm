@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   appNavGroups,
   isNavActive,
+  muestraAjustes,
   SETTINGS_ITEM,
   settingsSections,
 } from "@/lib/nav";
@@ -16,14 +17,25 @@ const labels = (groups: { items: { label: string }[] }[]) =>
   groups.map((g) => g.items.map((i) => i.label));
 
 describe("barra lateral agrupada", () => {
-  it("con todo apagado y como miembro: Trabajo, Agente y Resultados", () => {
-    const groups = appNavGroups({ role: "member" });
+  it("con todo apagado y como propietario: Trabajo, Agente y Resultados", () => {
+    const groups = appNavGroups({ role: "owner" });
     expect(groups.map((g) => g.title)).toEqual(["Trabajo", "Agente", undefined]);
     expect(labels(groups)).toEqual([
       ["Bandeja", "Pipeline", "Contactos"],
-      ["Agente", "Laboratorio"],
+      ["Guía de inicio", "Agente", "Laboratorio"],
       ["Resultados"],
     ]);
+  });
+
+  it("un integrante del equipo no ve el grupo Agente ni Ajustes", () => {
+    for (const role of ["member", null, undefined]) {
+      const groups = appNavGroups({ role });
+      expect(groups.map((g) => g.title)).toEqual(["Trabajo", undefined]);
+      expect(labels(groups)).toEqual([["Bandeja", "Pipeline", "Contactos"], ["Resultados"]]);
+      expect(muestraAjustes(role)).toBe(false);
+    }
+    expect(muestraAjustes("owner")).toBe(true);
+    expect(muestraAjustes("admin")).toBe(true);
   });
 
   it("AGENDA añade Citas al final de Trabajo", () => {
@@ -43,8 +55,8 @@ describe("barra lateral agrupada", () => {
       expect(agente.items[0]).toMatchObject({ href: "/onboarding", label: "Guía de inicio" });
     }
     for (const role of ["member", null, undefined]) {
-      const agente = appNavGroups({ role })[1]!;
-      expect(agente.items.map((i) => i.href)).not.toContain("/onboarding");
+      const hrefs = appNavGroups({ role }).flatMap((g) => g.items.map((i) => i.href));
+      expect(hrefs).not.toContain("/onboarding");
     }
   });
 

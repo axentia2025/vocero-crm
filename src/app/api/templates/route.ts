@@ -1,6 +1,6 @@
 import { desc } from "drizzle-orm";
 import { z } from "zod";
-import { apiError, parseBody, withAuth } from "@/lib/api";
+import { apiError, parseBody, withOwner } from "@/lib/api";
 import { getDb, schema } from "@/lib/db";
 import { scoped } from "@/lib/db/tenant";
 import { isTemplateLanguage } from "@/lib/template-languages";
@@ -13,7 +13,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export const GET = withAuth(async (session) => {
+export const GET = withOwner(async (session) => {
   const db = getDb();
   const templates = await db
     .select()
@@ -35,7 +35,7 @@ const createSchema = z.object({
   examples: z.array(z.string().trim().max(200)).max(10).optional(),
 });
 
-export const POST = withAuth(async (session, req: Request) => {
+export const POST = withOwner(async (session, req: Request) => {
   const body = await parseBody(req, createSchema);
   if (!body.ok) return body.response;
 

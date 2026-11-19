@@ -12,6 +12,7 @@ import {
   useEtapas,
   type Registro,
 } from "./registro-fields";
+import { useEquipo } from "@/components/equipo-context";
 
 const SOURCES: { value: SourceValue; label: string }[] = [
   { value: "referido", label: "Referido" },
@@ -22,20 +23,23 @@ const SOURCES: { value: SourceValue; label: string }[] = [
 ];
 
 export function NewContactDialog({
-  vendedores,
   onClose,
   onCreated,
   onOpenExisting,
   onEditExisting,
 }: {
-  vendedores: string[];
   onClose: () => void;
   onCreated: () => void;
   onOpenExisting: (contactId: string) => void;
   onEditExisting?: (contactId: string) => void;
 }) {
   const etapas = useEtapas();
-  const [registro, setRegistro] = useState<Registro>(REGISTRO_VACIO);
+  const { propietario, yo } = useEquipo();
+  // Lo que registra cada quien es suyo; el propietario puede dárselo a otro.
+  const [registro, setRegistro] = useState<Registro>(() => ({
+    ...REGISTRO_VACIO,
+    ownerUserId: yo.id,
+  }));
   const [phone, setPhone] = useState("");
   const [source, setSource] = useState<SourceValue>("referido");
   const [saving, setSaving] = useState(false);
@@ -60,7 +64,7 @@ export function NewContactDialog({
     setDuplicado(null);
 
     const ficha = Object.fromEntries(
-      Object.entries(fichaDelRegistro(registro)).filter(([, v]) => v !== null)
+      Object.entries(fichaDelRegistro(registro, propietario)).filter(([, v]) => v !== null)
     );
 
     const res = await fetch("/api/contacts", {
@@ -74,6 +78,7 @@ export function NewContactDialog({
         stageId: etapaElegida?.kind === "open" ? etapaElegida.id : undefined,
         notes: registro.notas.trim() || undefined,
         ficha: Object.keys(ficha).length > 0 ? ficha : undefined,
+        ...(propietario ? { ownerUserId: registro.ownerUserId || null } : {}),
       }),
     }).catch(() => null);
 
@@ -101,7 +106,7 @@ export function NewContactDialog({
 
     // Un cierre se registra moviendo el trato: así queda en la bitácora y
     // Resultados lo cuenta como venta ganada.
-    const cents = parseMoneyToCents(registro.costoImpl);
+    const cents = propietario ? parseMoneyToCents(registro.costoImpl) : null;
     const leadPatch: Record<string, unknown> = {};
     if (cents !== null) leadPatch.amountCents = cents;
     if (etapaElegida && etapaElegida.kind !== "open") leadPatch.stageId = etapaElegida.id;
@@ -140,7 +145,6 @@ export function NewContactDialog({
           value={registro}
           onChange={setRegistro}
           etapas={etapas}
-          vendedores={vendedores}
           afterName={
             <div className="grid grid-cols-2 gap-3">
               <div className="min-w-0 space-y-1.5">

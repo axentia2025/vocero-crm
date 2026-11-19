@@ -190,6 +190,20 @@ export const contact = pgTable(
      * (`getOrCreateConversation`); después manda el interruptor de la Bandeja.
      */
     aiPaused: boolean("ai_paused").notNull().default(false),
+    /**
+     * Quién del equipo trae y trabaja a este contacto (su vendedor).
+     *
+     * Un miembro del equipo SOLO ve los contactos que son suyos —y con ellos
+     * su trato, su conversación, sus notas y sus citas—; el propietario ve
+     * todo. NULL = sin asignar: es lo que llega solo por la línea de WhatsApp
+     * del negocio, y lo ve únicamente el propietario hasta que lo asigne.
+     *
+     * Si se borra la cuenta, el contacto no se pierde: queda sin asignar.
+     * Ver `src/server/equipo/acceso.ts`.
+     */
+    ownerUserId: text("owner_user_id").references(() => user.id, {
+      onDelete: "set null",
+    }),
     archivedAt: timestamp("archived_at"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
@@ -204,6 +218,8 @@ export const contact = pgTable(
     ),
     index("contact_org_wa_user_id_idx").on(t.organizationId, t.waUserId),
     index("contact_org_name_idx").on(t.organizationId, t.name),
+    // Cada pantalla de un miembro filtra por aquí.
+    index("contact_org_owner_idx").on(t.organizationId, t.ownerUserId),
   ]
 );
 

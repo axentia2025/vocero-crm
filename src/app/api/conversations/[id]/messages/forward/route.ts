@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { apiError, parseBody, withAuth } from "@/lib/api";
+import { apiError, parseBody, withOwner } from "@/lib/api";
 import { getConversation } from "@/server/inbox/queries";
 import { ForwardImageError } from "@/server/inbox/forward-image";
 import { forwardMessage } from "@/server/inbox/forward-message";
@@ -37,7 +37,7 @@ const SEND_ERROR_STATUS: Record<SendError["code"], number> = {
  * archivo nuevo. Destino y origen se resuelven dentro de la organización de la
  * sesión; lo ajeno o inexistente es 404.
  */
-export const POST = withAuth(async (session, req: Request, ctx: Params) => {
+export const POST = withOwner(async (session, req: Request, ctx: Params) => {
   const { id } = await ctx.params;
   const target = await getConversation(session.organizationId, id);
   if (!target) return apiError(404, "not_found", "Conversación no encontrada");

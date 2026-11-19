@@ -164,6 +164,11 @@ export type SalesBlockDto = {
   lossReasons: LossReasonRowDto[];
   /** true = no hubo NADA en el periodo; la UI lo dice en vez de pintar ceros. */
   empty: boolean;
+  /**
+   * true = quien mira no ve dinero (un integrante del equipo): los montos
+   * vienen en cero y la pantalla no los pinta. Ver `sinMontosVentas`.
+   */
+  montosOcultos?: boolean;
 };
 
 /* ── Origen y anuncios (solo conteos) ───────────────────────────── */
@@ -265,7 +270,35 @@ export type HygieneBlockDto = {
     hoursLeft: number;
   }[];
   clean: boolean;
+  /** true = quien mira no ve dinero: montos en cero/null y no se pintan. */
+  montosOcultos?: boolean;
 };
+
+/**
+ * El bloque de ventas sin dinero, para un integrante del equipo: conserva los
+ * conteos (prospectos, ganados, perdidos, embudo, tiempos) y borra los
+ * montos. Se borra en el SERVIDOR: esconderlo solo en la pantalla dejaría el
+ * dato en la respuesta.
+ */
+export function sinMontosVentas(b: SalesBlockDto): SalesBlockDto {
+  return {
+    ...b,
+    kpis: { ...b.kpis, wonCents: { current: 0, previous: 0 }, avgTicketCents: null },
+    pipeline: { openCents: 0, withoutAmount: 0, otherCurrency: 0 },
+    series: b.series.map((p) => ({ ...p, wonCents: 0 })),
+    montosOcultos: true,
+  };
+}
+
+/** Lo mismo para los pendientes: la lista de tratos en silencio sin montos. */
+export function sinMontosHigiene(b: HygieneBlockDto): HygieneBlockDto {
+  return {
+    ...b,
+    silent: b.silent.map((x) => ({ ...x, amountCents: null })),
+    silentAmountCents: 0,
+    montosOcultos: true,
+  };
+}
 
 /* ── Etiquetas ──────────────────────────────────────────────────── */
 
