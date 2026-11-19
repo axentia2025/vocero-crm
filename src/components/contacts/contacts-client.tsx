@@ -22,12 +22,19 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { parseMoneyToCents } from "@/lib/money";
 import { SOURCE_LABELS } from "@/server/contact-source";
 import { priorityRank } from "@/server/leads/priority";
 import { PriorityBadge } from "@/components/pipeline/priority-picker";
 import { ImportContactsDialog } from "./import-contacts-dialog";
 import { NewContactDialog } from "./new-contact-dialog";
+import {
+  RegistroFields,
+  fichaDelRegistro,
+  registroDesdeContacto,
+  useEtapas,
+  type Registro,
+} from "./registro-fields";
 import { StartConversation } from "./start-conversation";
 
 export function ContactsClient() {
@@ -82,6 +89,14 @@ export function ContactsClient() {
     const t = setTimeout(() => void refetch(), 250);
     return () => clearTimeout(t);
   }, [refetch]);
+
+  const vendedores = [
+    ...new Set(
+      contacts
+        .map((c) => String(c.ficha?.vendedor ?? "").trim())
+        .filter(Boolean)
+    ),
+  ].sort((a, b) => a.localeCompare(b, "es"));
 
   async function patch(id: string, body: Record<string, unknown>) {
     await fetch(`/api/contacts/${id}`, {
@@ -213,7 +228,10 @@ export function ContactsClient() {
                     {c.ficha?.empresa ? `${c.ficha.empresa} · ` : ""}
                     {formatPhone(c.phone)}
                     {c.email ? ` · ${c.email}` : ""}
-                    {c.notes ? ` · ${c.notes.slice(0, 60)}` : ""}
+                    {c.ficha?.vendedor ? ` · Vendedor: ${c.ficha.vendedor}` : ""}
+                    {c.ficha?.servicios
+                      ? ` · ${String(c.ficha.servicios).slice(0, 60)}`
+                      : ""}
                   </p>
                 </div>
                 <div className="ml-auto flex shrink-0 items-center gap-1.5">
@@ -272,10 +290,11 @@ export function ContactsClient() {
       {editing && (
         <EditDialog
           contact={editing}
+          vendedores={vendedores}
           onClose={() => setEditing(null)}
-          onSave={async (patchBody) => {
-            await patch(editing.id, patchBody);
+          onSaved={() => {
             setEditing(null);
+            void refetch();
           }}
         />
       )}
@@ -333,6 +352,7 @@ export function ContactsClient() {
 
       {creando && (
         <NewContactDialog
+          vendedores={vendedores}
           onClose={() => setCreando(false)}
           onCreated={() => {
             setCreando(false);
@@ -364,43 +384,75 @@ export function ContactsClient() {
 
 function EditDialog({
   contact,
+  vendedores,
   onClose,
-  onSave,
+  onSaved,
 }: {
   contact: ContactDto;
+  vendedores: string[];
   onClose: () => void;
-  onSave: (patch: {
-    name: string;
-    notes: string;
-    email?: string | null;
-    aiPaused?: boolean;
-    ficha?: Record<string, unknown>;
-  }) => Promise<void>;
+  onSaved: () => void;
 }) {
-  const [name, setName] = useState(contact.name);
-  const [empresa, setEmpresa] = useState(
-    (contact.ficha?.empresa as string) ?? ""
+  const etapas = useEtapas();
+  const [registro, setRegistro] = useState<Registro>(() =>
+    registroDesdeContacto(contact)
   );
-  const [email, setEmail] = useState(contact.email ?? "");
-  const [servicios, setServicios] = useState(contact.notes ?? "");
-  const [fechaIngreso, setFechaIngreso] = useState(
-    (contact.ficha?.fechaIngreso as string) ?? ""
+  const [trato, setTrato] = useState<{ leadId: string; stageId: string } | null>(
+    null
   );
-  const [fechaFirma, setFechaFirma] = useState(
-    (contact.ficha?.fechaFirma as string) ?? ""
-  );
-  const [costoImpl, setCostoImpl] = useState(
-    (contact.ficha?.costoImplementacion as string) ?? ""
-  );
-  const [costoMensual, setCostoMensual] = useState(
-    (contact.ficha?.costoMensual as string) ?? ""
-  );
-  const [etapa, setEtapa] = useState(
-    (contact.ficha?.etapa as string) ?? ""
-  );
+  const [cargado, setCargado] = useState(false);
   const [aiPaused, setAiPaused] = useState(contact.aiPaused ?? false);
+  const [saving, setSaving] = useState(false);
 
-  const ETAPAS = ["Interesado", "En Proceso", "POC", "Cliente Actual"];
+  useEffect(() => {
+    void (async () => {
+      const detail = (await fetch(`/api/contacts/${contact.id}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null)) as {
+        stage: { id: string } | null;
+        lead: { id: string } | null;
+      } | null;
+      if (detail?.lead && detail.stage) {
+        setTrato({ leadId: detail.lead.id, stageId: detail.stage.id });
+        setRegistro((r) => ({ ...r, stageId: detail.stage!.id }));
+      }
+      setCargado(true);
+    })();
+  }, [contact.id]);
+
+  async function guardar() {
+    setSaving(true);
+    await fetch(`/api/contacts/${contact.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        name: registro.name.trim(),
+        email: registro.email.trim() || null,
+        notes: registro.notas.trim() || null,
+        // `etapa` en la ficha era un duplicado de la etapa del Pipeline.
+        ficha: { ...fichaDelRegistro(registro), etapa: null },
+        ...(aiPaused !== (contact.aiPaused ?? false) ? { aiPaused } : {}),
+      }),
+    }).catch(() => null);
+
+    if (trato) {
+      const leadPatch: Record<string, unknown> = {};
+      if (registro.stageId && registro.stageId !== trato.stageId) {
+        leadPatch.stageId = registro.stageId;
+      }
+      const cents = parseMoneyToCents(registro.costoImpl);
+      if (cents !== null) leadPatch.amountCents = cents;
+      if (Object.keys(leadPatch).length > 0) {
+        await fetch(`/api/pipeline/leads/${trato.leadId}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(leadPatch),
+        }).catch(() => null);
+      }
+    }
+    setSaving(false);
+    onSaved();
+  }
 
   return (
     <div
@@ -413,123 +465,14 @@ function EditDialog({
       >
         <h3 className="mb-4 font-semibold">Editar contacto</h3>
         <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium" htmlFor="edit-name">
-                Contacto
-              </label>
-              <Input
-                id="edit-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium" htmlFor="edit-empresa">
-                Empresa
-              </label>
-              <Input
-                id="edit-empresa"
-                value={empresa}
-                onChange={(e) => setEmpresa(e.target.value)}
-                placeholder="Nombre de la empresa"
-              />
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium" htmlFor="edit-email">
-              Correo electrónico
-            </label>
-            <Input
-              id="edit-email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="correo@ejemplo.com"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium" htmlFor="edit-etapa">
-              Etapa
-            </label>
-            <select
-              id="edit-etapa"
-              value={etapa}
-              onChange={(e) => setEtapa(e.target.value)}
-              className="h-9 w-full rounded-md border border-input bg-card px-2 text-sm"
-            >
-              <option value="">Sin etapa</option>
-              {ETAPAS.map((et) => (
-                <option key={et} value={et}>
-                  {et}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium" htmlFor="edit-servicios">
-              Servicios Contratados
-            </label>
-            <Textarea
-              id="edit-servicios"
-              rows={2}
-              value={servicios}
-              onChange={(e) => setServicios(e.target.value)}
-              placeholder="CRM + Agente de WhatsApp…"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium" htmlFor="edit-fecha-ingreso">
-                Fecha de Ingreso
-              </label>
-              <Input
-                id="edit-fecha-ingreso"
-                type="date"
-                value={fechaIngreso}
-                onChange={(e) => setFechaIngreso(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium" htmlFor="edit-fecha-firma">
-                Fecha de Firma
-              </label>
-              <Input
-                id="edit-fecha-firma"
-                type="date"
-                value={fechaFirma}
-                onChange={(e) => setFechaFirma(e.target.value)}
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium" htmlFor="edit-costo-impl">
-                Costo de Implementación
-              </label>
-              <Input
-                id="edit-costo-impl"
-                type="text"
-                inputMode="decimal"
-                value={costoImpl}
-                onChange={(e) => setCostoImpl(e.target.value)}
-                placeholder="$15,000"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium" htmlFor="edit-costo-mensual">
-                Costo Mensual Sin IVA
-              </label>
-              <Input
-                id="edit-costo-mensual"
-                type="text"
-                inputMode="decimal"
-                value={costoMensual}
-                onChange={(e) => setCostoMensual(e.target.value)}
-                placeholder="$3,500"
-              />
-            </div>
-          </div>
+          <RegistroFields
+            idPrefix="edit"
+            value={registro}
+            onChange={setRegistro}
+            etapas={cargado ? etapas : null}
+            vendedores={vendedores}
+            sinTrato={cargado && !trato}
+          />
           <label className="flex items-start gap-2 text-sm">
             <input
               type="checkbox"
@@ -550,27 +493,10 @@ function EditDialog({
             Cancelar
           </Button>
           <Button
-            disabled={!name.trim()}
-            onClick={() => {
-              const fichaPatch: Record<string, unknown> = {};
-              fichaPatch.empresa = empresa.trim() || null;
-              fichaPatch.etapa = etapa || null;
-              fichaPatch.fechaIngreso = fechaIngreso || null;
-              fichaPatch.fechaFirma = fechaFirma || null;
-              fichaPatch.costoImplementacion = costoImpl.trim() || null;
-              fichaPatch.costoMensual = costoMensual.trim() || null;
-              void onSave({
-                name: name.trim(),
-                notes: servicios,
-                email: email.trim() || null,
-                ficha: fichaPatch,
-                ...(aiPaused !== (contact.aiPaused ?? false)
-                  ? { aiPaused }
-                  : {}),
-              });
-            }}
+            disabled={!registro.name.trim() || saving || !cargado}
+            onClick={() => void guardar()}
           >
-            Guardar
+            {saving ? "Guardando…" : "Guardar"}
           </Button>
         </div>
       </div>

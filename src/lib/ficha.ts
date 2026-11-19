@@ -9,8 +9,25 @@ import type { FichaDto, FichaValue } from "./types";
  * que la busca por su nombre exacto.
  */
 
+/** Campos del registro de contactos de Axentia, en el orden en que se capturan. */
+export const FICHA_REGISTRO: { key: string; label: string }[] = [
+  { key: "empresa", label: "Empresa" },
+  { key: "servicios", label: "Servicios contratados" },
+  { key: "vendedor", label: "Vendedor" },
+  { key: "comision", label: "Comisión" },
+  { key: "fechaIngreso", label: "Fecha de ingreso" },
+  { key: "fechaFirma", label: "Fecha de firma" },
+  { key: "costoImplementacion", label: "Costo de implementación" },
+  { key: "costoMensual", label: "Costo mensual sin IVA" },
+];
+
+const LABELS = new Map(FICHA_REGISTRO.map((f) => [f.key, f.label]));
+const ORDEN = new Map(FICHA_REGISTRO.map((f, i) => [f.key, i]));
+
 /** `dolor_principal` → `Dolor principal`. No modifica el dato, solo cómo se ve. */
 export function fichaLabel(key: string): string {
+  const conocida = LABELS.get(key);
+  if (conocida) return conocida;
   const palabras = key
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .replace(/[_-]+/g, " ")
@@ -59,5 +76,9 @@ export function parseFichaValue(
 
 /** Claves ordenadas para que la ficha no baile de posición entre recargas. */
 export function fichaEntries(ficha: FichaDto): [string, FichaValue][] {
-  return Object.entries(ficha).sort(([a], [b]) => a.localeCompare(b, "es"));
+  return Object.entries(ficha).sort(([a], [b]) => {
+    const oa = ORDEN.get(a) ?? Infinity;
+    const ob = ORDEN.get(b) ?? Infinity;
+    return oa !== ob ? oa - ob : a.localeCompare(b, "es");
+  });
 }
