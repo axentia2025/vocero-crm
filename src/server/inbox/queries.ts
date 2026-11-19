@@ -4,6 +4,8 @@ import { scoped } from "@/lib/db/tenant";
 import { isWindowOpen, replyWindow, windowRemainingMs } from "@/server/inbox/window";
 import { capabilitiesFor, windowMsFor } from "@/server/channels/capabilities";
 import type { ConversationDto } from "@/lib/types";
+import type { FiltroVendedor } from "@/lib/equipo";
+import { condicionContacto } from "@/server/equipo/acceso";
 
 /**
  * 018 — El anuncio de origen viaja con la conversación. La llave única
@@ -41,7 +43,9 @@ function aAnuncioDeLista(
 
 export async function listConversations(
   organizationId: string,
-  since?: Date
+  since?: Date,
+  /** De quién son los contactos que entran (un integrante: solo los suyos). */
+  vendedor: FiltroVendedor = { tipo: "todos" }
 ): Promise<ConversationDto[]> {
   const db = getDb();
   const previewSql = sql<string | null>`(
@@ -77,7 +81,8 @@ export async function listConversations(
         schema.conversation.organizationId,
         organizationId,
         eq(schema.conversation.isTest, false),
-        since ? gt(schema.conversation.updatedAt, since) : undefined
+        since ? gt(schema.conversation.updatedAt, since) : undefined,
+        condicionContacto(vendedor)
       )
     )
     .orderBy(desc(sql`coalesce(${schema.conversation.lastMessageAt}, ${schema.conversation.createdAt})`));

@@ -1,4 +1,7 @@
+import { redirect } from "next/navigation";
 import { SettingsNav } from "@/components/settings/settings-nav";
+import { canConfigure } from "@/lib/auth/roles";
+import { getSessionOrNull } from "@/lib/auth/session";
 import { agendaEnabled } from "@/server/agenda/flag";
 import { atribucionEnabled } from "@/server/attribution/flag";
 import { isChannelEnabled } from "@/server/channels/enabled";
@@ -8,9 +11,13 @@ import { isChannelEnabled } from "@/server/channels/enabled";
 // plataforma no haría nada.
 export const dynamic = "force-dynamic";
 
-export default function SettingsLayout({
+export default async function SettingsLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  // Ajustes (WhatsApp, IA, equipo…) es del propietario: un integrante del
+  // equipo vuelve a su Bandeja. Las rutas de /api/settings lo exigen también.
+  const session = await getSessionOrNull();
+  if (!canConfigure(session?.role)) redirect("/inbox");
   return (
     <div className="flex h-full flex-col">
       <header className="border-b px-4 py-3 sm:px-6 sm:py-4">

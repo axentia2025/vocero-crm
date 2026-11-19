@@ -1,4 +1,4 @@
-import { asc, desc, eq, gte, lt } from "drizzle-orm";
+import { asc, desc, eq, gte, lt, type SQL } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { scoped } from "@/lib/db/tenant";
 import type { DateRange } from "@/lib/time/calendar";
@@ -66,11 +66,14 @@ function baseQuery() {
 /** Las últimas 200 citas: el listado de siempre, para quien no pide rango. */
 export async function listBookings(
   organizationId: string,
-  settings?: CalendarSettings
+  settings?: CalendarSettings,
+  /** Filtro extra (de quién son los contactos: ver `server/equipo/acceso`). */
+  extra?: SQL
 ): Promise<BookingListItem[]> {
   const resolved = settings ?? (await getSettings(organizationId));
   const rows = await baseQuery()
-    .where(scoped(schema.booking.organizationId, organizationId))
+    // Sin filtro extra, el WHERE de siempre (lo afirma bookings-rango-api).
+    .where(scoped(schema.booking.organizationId, organizationId, ...(extra ? [extra] : [])))
     .orderBy(desc(schema.booking.scheduledAt))
     .limit(LIST_LIMIT);
   return rows.map((r) => toListItem(r, resolved.timezone));
@@ -86,7 +89,9 @@ export async function listBookings(
 export async function listBookingsInRange(
   organizationId: string,
   range: DateRange,
-  settings?: CalendarSettings
+  settings?: CalendarSettings,
+  /** Filtro extra (de quién son los contactos: ver `server/equipo/acceso`). */
+  extra?: SQL
 ): Promise<{ bookings: BookingListItem[]; truncated: boolean }> {
   const resolved = settings ?? (await getSettings(organizationId));
   const tz = resolved.timezone;
@@ -100,7 +105,8 @@ export async function listBookingsInRange(
         schema.booking.organizationId,
         organizationId,
         gte(schema.booking.scheduledAt, new Date(start.getTime() - LOOKBACK_MS)),
-        lt(schema.booking.scheduledAt, end)
+        lt(schema.booking.scheduledAt, end),
+        ...(extra ? [extra] : [])
       )
     )
     .orderBy(asc(schema.booking.scheduledAt))

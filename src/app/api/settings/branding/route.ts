@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { apiError, parseBody, withAuth } from "@/lib/api";
+import { apiError, parseBody, withOwner } from "@/lib/api";
 import { getSessionOrNull } from "@/lib/auth/session";
 import { isValidHex, resolveAccentSet } from "@/lib/branding";
 import { CURRENCIES } from "@/lib/money";
@@ -21,7 +21,7 @@ const putSchema = z.object({
   currency: z.enum(CURRENCIES),
 });
 
-export const PUT = withAuth(async (session, req: Request) => {
+export const PUT = withOwner(async (session, req: Request) => {
   if (session.role !== "owner") {
     return apiError(403, "forbidden", "Solo el propietario puede cambiar la marca");
   }

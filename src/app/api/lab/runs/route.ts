@@ -1,5 +1,5 @@
 import { desc } from "drizzle-orm";
-import { apiError, withAuth } from "@/lib/api";
+import { apiError, withOwner } from "@/lib/api";
 import { getDb, schema } from "@/lib/db";
 import { scoped } from "@/lib/db/tenant";
 import { isAiConfiguredFor } from "@/lib/ai/provider";
@@ -9,7 +9,7 @@ import { RunConflictError, startRun } from "@/server/lab/runner";
 export const dynamic = "force-dynamic";
 
 /** Historial de corridas con delta de score vs la anterior (FR-033). */
-export const GET = withAuth(async (session) => {
+export const GET = withOwner(async (session) => {
   const db = getDb();
   const runs = await db
     .select()
@@ -43,7 +43,7 @@ export const GET = withAuth(async (session) => {
   });
 });
 
-export const POST = withAuth(async (session) => {
+export const POST = withOwner(async (session) => {
   // 036 — El Laboratorio prueba al cerebro conectado: sin él no hay a quién.
   if (!leerConfigDespacho().active) {
     return apiError(

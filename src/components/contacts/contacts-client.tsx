@@ -36,9 +36,19 @@ import {
   type Registro,
 } from "./registro-fields";
 import { StartConversation } from "./start-conversation";
+import { useEquipo } from "@/components/equipo-context";
+import {
+  useFiltroVendedor,
+  VendedorFiltro,
+  vendedorParam,
+} from "@/components/equipo/vendedor-filtro";
 
 export function ContactsClient() {
   const router = useRouter();
+  // El propietario ve a todo el equipo y filtra por vendedor; un integrante
+  // ve solo sus contactos y no importa, archiva, borra ni escribe por la línea.
+  const { propietario } = useEquipo();
+  const [vendedor, setVendedor] = useFiltroVendedor();
   const [contacts, setContacts] = useState<ContactDto[]>([]);
   const [query, setQuery] = useState("");
   const [stage, setStage] = useState("all");
@@ -72,7 +82,10 @@ export function ContactsClient() {
     if (query.trim()) params.set("q", query.trim());
     if (stage !== "all") params.set("stage", stage);
     if (showArchived) params.set("archived", "true");
-    const res = await fetch(`/api/contacts?${params}`).catch(() => null);
+    const porVendedor = vendedorParam(vendedor);
+    const res = await fetch(
+      `/api/contacts?${params}${porVendedor ? `&${porVendedor}` : ""}`
+    ).catch(() => null);
     if (!res?.ok) return;
     const data = (await res.json()) as { contacts: ContactDto[] };
     // A quién llamar primero: alta arriba, sin prioridad al final. El orden lo
@@ -83,20 +96,12 @@ export function ContactsClient() {
         (a, b) => priorityRank(a.priority ?? null) - priorityRank(b.priority ?? null)
       )
     );
-  }, [query, stage, showArchived]);
+  }, [query, stage, showArchived, vendedor]);
 
   useEffect(() => {
     const t = setTimeout(() => void refetch(), 250);
     return () => clearTimeout(t);
   }, [refetch]);
-
-  const vendedores = [
-    ...new Set(
-      contacts
-        .map((c) => String(c.ficha?.vendedor ?? "").trim())
-        .filter(Boolean)
-    ),
-  ].sort((a, b) => a.localeCompare(b, "es"));
 
   async function patch(id: string, body: Record<string, unknown>) {
     await fetch(`/api/contacts/${id}`, {
@@ -116,21 +121,26 @@ export function ContactsClient() {
             <UserPlus className="mr-1.5 h-4 w-4" strokeWidth={1.8} />
             Nuevo contacto
           </Button>
-          <Button size="sm" variant="secondary" onClick={() => setImportando(true)}>
-            <Upload className="mr-1.5 h-4 w-4" strokeWidth={1.8} />
-            Importar
-          </Button>
+          {propietario && (
+            <Button size="sm" variant="secondary" onClick={() => setImportando(true)}>
+              <Upload className="mr-1.5 h-4 w-4" strokeWidth={1.8} />
+              Importar
+            </Button>
+          )}
         </div>
         <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:gap-3">
-          <label className="flex items-center gap-2 text-xs text-muted-foreground">
-            <input
-              type="checkbox"
-              checked={showArchived}
-              onChange={(e) => setShowArchived(e.target.checked)}
-              className="accent-primary"
-            />
-            Ver archivados
-          </label>
+          {propietario && (
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={showArchived}
+                onChange={(e) => setShowArchived(e.target.checked)}
+                className="accent-primary"
+              />
+              Ver archivados
+            </label>
+          )}
+          <VendedorFiltro value={vendedor} onChange={setVendedor} />
           {stages.length > 0 && (
             <select
               value={stage}
@@ -181,7 +191,11 @@ export function ContactsClient() {
               icon={Users}
               className="h-full"
               title="Sin contactos"
-              description="Cada persona que escriba a tu WhatsApp quedará registrada aquí automáticamente."
+              description={
+                propietario
+                  ? "Cada persona que escriba a tu WhatsApp quedará registrada aquí automáticamente."
+                  : "Aquí verás los prospectos que registres. Usa «Nuevo contacto» antes de tu primera reunión con cada uno."
+              }
             />
           )
         ) : (
@@ -228,7 +242,11 @@ export function ContactsClient() {
                     {c.ficha?.empresa ? `${c.ficha.empresa} · ` : ""}
                     {formatPhone(c.phone)}
                     {c.email ? ` · ${c.email}` : ""}
-                    {c.ficha?.vendedor ? ` · Vendedor: ${c.ficha.vendedor}` : ""}
+                    {/* El vendedor sale del dueño del contacto; al
+                        integrante no se le repite su propio nombre. */}
+                    {propietario
+                      ? ` · Vendedor: ${c.owner?.name || "sin asignar"}`
+                      : ""}
                     {c.ficha?.servicios
                       ? ` · ${String(c.ficha.servicios).slice(0, 60)}`
                       : ""}
@@ -243,43 +261,50 @@ export function ContactsClient() {
                     Editar
                   </Button>
                   {/* A quien nunca escribió hay que abrirle la conversación con
-                      una plantilla: es regla de Meta, no del CRM. */}
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label="Escribir primero"
-                    title="Escribir primero (con plantilla)"
-                    onClick={() => setEscribiendo(c)}
-                  >
-                    <Send className="h-4 w-4" />
-                  </Button>
+                      una plantilla: es regla de Meta, no del CRM. La línea es
+                      del negocio: solo escribe el propietario. */}
+                  {propietario && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Escribir primero"
+                      title="Escribir primero (con plantilla)"
+                      onClick={() => setEscribiendo(c)}
+                    >
+                      <Send className="h-4 w-4" />
+                    </Button>
+                  )}
                   <Link href={`/inbox?contact=${c.id}`}>
                     <Button variant="ghost" size="icon" aria-label="Abrir conversación">
                       <MessageSquareText className="h-4 w-4" />
                     </Button>
                   </Link>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label={c.archivedAt ? "Desarchivar" : "Archivar"}
-                    onClick={() => void patch(c.id, { archived: !c.archivedAt })}
-                  >
-                    {c.archivedAt ? (
-                      <ArchiveRestore className="h-4 w-4" />
-                    ) : (
-                      <Archive className="h-4 w-4" />
-                    )}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label="Eliminar contacto"
-                    title="Eliminar contacto"
-                    className="text-destructive hover:text-destructive"
-                    onClick={() => setDeleting(c)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  {propietario && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label={c.archivedAt ? "Desarchivar" : "Archivar"}
+                      onClick={() => void patch(c.id, { archived: !c.archivedAt })}
+                    >
+                      {c.archivedAt ? (
+                        <ArchiveRestore className="h-4 w-4" />
+                      ) : (
+                        <Archive className="h-4 w-4" />
+                      )}
+                    </Button>
+                  )}
+                  {propietario && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Eliminar contacto"
+                      title="Eliminar contacto"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => setDeleting(c)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
               </li>
             ))}
@@ -290,7 +315,6 @@ export function ContactsClient() {
       {editing && (
         <EditDialog
           contact={editing}
-          vendedores={vendedores}
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null);
@@ -352,7 +376,6 @@ export function ContactsClient() {
 
       {creando && (
         <NewContactDialog
-          vendedores={vendedores}
           onClose={() => setCreando(false)}
           onCreated={() => {
             setCreando(false);
@@ -384,15 +407,14 @@ export function ContactsClient() {
 
 function EditDialog({
   contact,
-  vendedores,
   onClose,
   onSaved,
 }: {
   contact: ContactDto;
-  vendedores: string[];
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const { propietario } = useEquipo();
   const etapas = useEtapas();
   const [registro, setRegistro] = useState<Registro>(() =>
     registroDesdeContacto(contact)
@@ -430,8 +452,12 @@ function EditDialog({
         email: registro.email.trim() || null,
         notes: registro.notas.trim() || null,
         // `etapa` en la ficha era un duplicado de la etapa del Pipeline.
-        ficha: { ...fichaDelRegistro(registro), etapa: null },
-        ...(aiPaused !== (contact.aiPaused ?? false) ? { aiPaused } : {}),
+        ficha: { ...fichaDelRegistro(registro, propietario), etapa: null },
+        // Pausar al agente y reasignar el vendedor: solo el propietario.
+        ...(propietario && aiPaused !== (contact.aiPaused ?? false) ? { aiPaused } : {}),
+        ...(propietario && registro.ownerUserId !== (contact.owner?.id ?? "")
+          ? { ownerUserId: registro.ownerUserId || null }
+          : {}),
       }),
     }).catch(() => null);
 
@@ -440,7 +466,8 @@ function EditDialog({
       if (registro.stageId && registro.stageId !== trato.stageId) {
         leadPatch.stageId = registro.stageId;
       }
-      const cents = parseMoneyToCents(registro.costoImpl);
+      // El monto del trato lo captura el propietario.
+      const cents = propietario ? parseMoneyToCents(registro.costoImpl) : null;
       if (cents !== null) leadPatch.amountCents = cents;
       if (Object.keys(leadPatch).length > 0) {
         await fetch(`/api/pipeline/leads/${trato.leadId}`, {
@@ -470,9 +497,9 @@ function EditDialog({
             value={registro}
             onChange={setRegistro}
             etapas={cargado ? etapas : null}
-            vendedores={vendedores}
             sinTrato={cargado && !trato}
           />
+          {propietario && (
           <label className="flex items-start gap-2 text-sm">
             <input
               type="checkbox"
@@ -487,6 +514,7 @@ function EditDialog({
               </span>
             </span>
           </label>
+          )}
         </div>
         <div className="mt-4 flex justify-end gap-2">
           <Button variant="ghost" onClick={onClose}>

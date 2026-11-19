@@ -52,6 +52,7 @@ export function Composer({
   onReplyChange,
   children,
   onNota,
+  soloNotas = false,
 }: {
   conversation: ConversationDto;
   onSend: (text: string, replyTo: MessageDto | null) => Promise<string | null>;
@@ -67,6 +68,12 @@ export function Composer({
    * Devuelve el error a mostrar, o `null`.
    */
   onNota?: (texto: string) => Promise<string | null>;
+  /**
+   * Quien mira no escribe por la línea de WhatsApp del negocio (un integrante
+   * del equipo de ventas): solo anota. Sin pestañas ni plantillas; el servidor
+   * niega el envío de todos modos.
+   */
+  soloNotas?: boolean;
 }) {
   // 051 — Lo que quedó escrito en esta conversación vuelve al regresar a ella.
   const [text, setText] = useState(() => leerBorrador("responder", conversation.id));
@@ -97,7 +104,7 @@ export function Composer({
   const [activa, setActiva] = useState(0);
   const [cerradoEn, setCerradoEn] = useState<number | null>(null);
   // 050 — Responder al cliente o anotar para el equipo.
-  const [modo, setModo] = useState<"responder" | "nota">("responder");
+  const [modo, setModo] = useState<"responder" | "nota">(soloNotas ? "nota" : "responder");
   const notaRef = useRef<HTMLTextAreaElement>(null);
   // 055 · D3 — Alt+R escribe una respuesta y Alt+N una nota interna, también
   // con el foco en la caja. Con un diálogo abierto no actúan.
@@ -106,6 +113,7 @@ export function Composer({
     const onKey = (e: KeyboardEvent) => {
       const atajo = atajoBandeja(e);
       if (atajo !== "responder" && atajo !== "nota") return;
+      if (soloNotas && atajo === "responder") return;
       if (hayDialogoAbierto()) return;
       if (atajo === "nota" && !hayNotas) return;
       e.preventDefault();
@@ -116,13 +124,15 @@ export function Composer({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [hayNotas]);
+  }, [hayNotas, soloNotas]);
   const [nota, setNota] = useState(() => leerBorrador("nota", conversation.id));
   const [guardandoNota, setGuardandoNota] = useState(false);
   // Hay caja de texto libre (ventana normal, o la humana de Instagram/Messenger).
   const textoLibre = conversation.windowOpen || Boolean(conversation.humanWindow?.open);
 
   useEffect(() => {
+    // Las plantillas solo sirven para escribir al cliente.
+    if (soloNotas) return;
     let cancelled = false;
     fetch("/api/templates")
       .then((r) => (r.ok ? r.json() : { templates: [] }))
@@ -134,7 +144,7 @@ export function Composer({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [soloNotas]);
 
   // 039: al elegir «Responder» se escribe ya, sin buscar el campo.
   useEffect(() => {
@@ -447,7 +457,7 @@ export function Composer({
   // cerrada no hay nada que ofrecer, solo decir qué pasa y qué lo arregla.
   // 050 — Las pestañas van arriba en TODAS las ramas: anotar no depende de
   // la ventana de Meta, y con la ventana cerrada es cuando más se necesita.
-  const pestanas = onNota ? (
+  const pestanas = onNota && !soloNotas ? (
     <div role="tablist" aria-label="Qué escribir" className="mb-2 flex gap-1">
       {(
         [
@@ -491,7 +501,7 @@ export function Composer({
     else setNota("");
   }
 
-  if (onNota && modo === "nota") {
+  if (onNota && (modo === "nota" || soloNotas)) {
     return withDropZone(
       <div className="border-t bg-background px-[18px] pb-3.5 pt-3">
         {pestanas}
@@ -538,7 +548,9 @@ export function Composer({
             <span />
           )}
           <p className="font-mono text-[10.5px] tracking-[0.04em] text-text-3">
-            No se envía al cliente
+            {soloNotas
+              ? "Notas de seguimiento · al cliente le escribe el propietario"
+              : "No se envía al cliente"}
           </p>
         </div>
       </div>

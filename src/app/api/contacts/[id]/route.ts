@@ -1,6 +1,13 @@
 import { eq } from "drizzle-orm";
 import { z } from "zod";
-import { apiError, parseBody, withAuth } from "@/lib/api";
+import { apiError, parseBody, withAuth, withOwner } from "@/lib/api";
+import { parcheDeFichaPermitido, veTodo } from "@/lib/equipo";
+import {
+  asignarDueno,
+  contactoVisible,
+  nombresDeVendedores,
+  vendedorDeLaOrganizacion,
+} from "@/server/equipo/acceso";
 import { getDb, schema } from "@/lib/db";
 import { scoped } from "@/lib/db/tenant";
 import {
@@ -21,8 +28,12 @@ export const dynamic = "force-dynamic";
 
 type Params = { params: Promise<{ id: string }> };
 
+const NO_ENCONTRADO = () => apiError(404, "not_found", "Contacto no encontrado");
+
 export const GET = withAuth(async (session, _req: Request, ctx: Params) => {
   const { id } = await ctx.params;
+  // El contacto de otro vendedor, para un integrante, no existe.
+  if (!(await contactoVisible(session, id))) return NO_ENCONTRADO();
   const contact = await getContactById(session.organizationId, id);
   if (!contact) return apiError(404, "not_found", "Contacto no encontrado");
   const [stageRow, anuncio] = await Promise.all([
@@ -33,8 +44,12 @@ export const GET = withAuth(async (session, _req: Request, ctx: Params) => {
   if (anuncio && !anuncio.imageAssetId) {
     repararImagenSiFalta(session.organizationId, id);
   }
+  const nombres = await nombresDeVendedores(session.organizationId);
   return Response.json({
-    contact: serializeContact(contact, null, null, cuentaComoAnuncio(anuncio)),
+    contact: serializeContact(contact, null, null, cuentaComoAnuncio(anuncio), {
+      role: session.role,
+      nombres,
+    }),
     // 018 — de qué anuncio llegó, o null si escribió por su cuenta.
     anuncio,
     stage: stageRow
@@ -63,9 +78,15 @@ const patchSchema = z.object({
    * borrara lo recién descubierto al otro.
    */
   ficha: z.record(z.unknown()).optional(),
+  /**
+   * Reasignar su vendedor (solo el propietario): el id de una cuenta del
+   * equipo, o `null` para dejarlo sin asignar.
+   */
+  ownerUserId: z.string().min(1).nullable().optional(),
 });
 
-export const DELETE = withAuth(async (session, _req: Request, ctx: Params) => {
+// Borrar es irreversible y se lleva conversaciones y mensajes: del propietario.
+export const DELETE = withOwner(async (session, _req: Request, ctx: Params) => {
   const { id } = await ctx.params;
   const db = getDb();
   const deleted = await db
@@ -87,14 +108,52 @@ export const PATCH = withAuth(async (session, req: Request, ctx: Params) => {
   const body = await parseBody(req, patchSchema);
   if (!body.ok) return body.response;
 
+  if (!(await contactoVisible(session, id))) return NO_ENCONTRADO();
+  // Lo que es del negocio y no del vendedor: archivar (sale de la lista de
+  // todos), apagar al agente de la línea y decidir de quién es el contacto.
+  if (
+    !veTodo(session.role) &&
+    (body.data.archived !== undefined ||
+      body.data.aiPaused !== undefined ||
+      body.data.ownerUserId !== undefined)
+  ) {
+    return apiError(
+      403,
+      "forbidden",
+      "Archivar, pausar al agente o reasignar el contacto lo hace el propietario"
+    );
+  }
+  // El dinero de la ficha no lo toca un integrante (se descarta sin error:
+  // su formulario ni siquiera lo enseña), y «Vendedor» sale del dueño.
+  const fichaPatch =
+    body.data.ficha === undefined
+      ? undefined
+      : parcheDeFichaPermitido(body.data.ficha, session.role);
+
+  if (body.data.ownerUserId !== undefined) {
+    const dueno =
+      body.data.ownerUserId === null
+        ? null
+        : await vendedorDeLaOrganizacion(session.organizationId, body.data.ownerUserId);
+    if (body.data.ownerUserId !== null && !dueno) {
+      return apiError(422, "invalid_owner", "Ese vendedor no es parte del equipo");
+    }
+    const ok = await asignarDueno({
+      organizationId: session.organizationId,
+      contactId: id,
+      dueno,
+    });
+    if (!ok) return NO_ENCONTRADO();
+  }
+
   // La ficha va por su propia puerta —la MISMA que usa el cerebro externo en
   // `PUT /api/bot/ficha`— para heredar el merge y las cotas. Escribirla aquí
   // con un `set` plano sería un segundo camino con otras reglas.
-  if (body.data.ficha !== undefined) {
+  if (fichaPatch !== undefined) {
     const res = await upsertFicha({
       organizationId: session.organizationId,
       contactId: id,
-      ficha: body.data.ficha,
+      ficha: fichaPatch,
     });
     if (!res) return apiError(404, "not_found", "Contacto no encontrado");
   }
@@ -130,15 +189,21 @@ export const PATCH = withAuth(async (session, req: Request, ctx: Params) => {
   if (body.data.aiPaused !== undefined) {
     await pauseConversations(session.organizationId, [id], body.data.aiPaused);
   }
-  if (body.data.ficha !== undefined) {
+  if (fichaPatch !== undefined || body.data.ownerUserId !== undefined) {
     await avisarLibrada({
       organizationId: session.organizationId,
       contactId: id,
       incluirReabierto: false,
     });
   }
-  const anuncio = await anuncioDelContacto(session.organizationId, id);
+  const [anuncio, nombres] = await Promise.all([
+    anuncioDelContacto(session.organizationId, id),
+    nombresDeVendedores(session.organizationId),
+  ]);
   return Response.json({
-    contact: serializeContact(updated[0], null, null, cuentaComoAnuncio(anuncio)),
+    contact: serializeContact(updated[0], null, null, cuentaComoAnuncio(anuncio), {
+      role: session.role,
+      nombres,
+    }),
   });
 });

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { apiError, parseBody, withAuth } from "@/lib/api";
+import { apiError, parseBody, withOwner } from "@/lib/api";
 import { CONNECTOR_ORDER } from "@/lib/agenda-connectors";
 import { agendaDisabledResponse, agendaEnabled } from "@/server/agenda/flag";
 import {
@@ -19,7 +19,7 @@ export const dynamic = "force-dynamic";
  * Jamás devuelve credenciales de un conector — esas viven en su propio
  * endpoint y solo salen como últimos 4 dígitos.
  */
-export const GET = withAuth(async (session) => {
+export const GET = withOwner(async (session) => {
   if (!agendaEnabled()) return agendaDisabledResponse();
   const settings = await getSettings(session.organizationId);
   return Response.json({ settings });
@@ -54,7 +54,7 @@ const putSchema = z.object({
  * una celda. Lo que sí se rechaza es lo que rompería el motor después: una
  * zona horaria que el runtime no conoce, o un conector inexistente.
  */
-export const PUT = withAuth(async (session, req: Request) => {
+export const PUT = withOwner(async (session, req: Request) => {
   if (!agendaEnabled()) return agendaDisabledResponse();
   const body = await parseBody(req, putSchema);
   if (!body.ok) return body.response;

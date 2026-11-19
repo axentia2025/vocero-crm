@@ -152,6 +152,8 @@ export type ContactDto = {
   ficha?: FichaDto;
   /** 027 — El agente no le responde a esta persona: la atiende el dueño. */
   aiPaused?: boolean;
+  /** Su vendedor: la cuenta del equipo dueña del contacto. null = sin asignar. */
+  owner?: { id: string; name: string } | null;
 };
 
 /* ============================================================

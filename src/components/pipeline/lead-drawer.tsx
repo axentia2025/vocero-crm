@@ -44,7 +44,8 @@ export function LeadDrawer({
   onClose: () => void;
   /** Pasa por el mismo camino que el arrastre: perder exige motivo. */
   onMoveStage: (stageId: string) => void;
-  onAmount: (cents: number | null) => void;
+  /** Sin él, quien mira no ve montos: la sección «Monto» no se pinta. */
+  onAmount?: (cents: number | null) => void;
   onPriority: (value: PriorityValue | null) => void;
 }) {
   const [ficha, setFicha] = useState<FichaDto>({});
@@ -169,7 +170,8 @@ export function LeadDrawer({
             )}
           </section>
 
-          {/* Cuánto */}
+          {/* Cuánto: solo para quien captura los montos (el propietario). */}
+          {onAmount && (
           <section className="border-b p-4">
             <p className="mb-2 kicker">
               Monto ({moneda})
@@ -183,7 +185,7 @@ export function LeadDrawer({
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !montoInvalido) {
                       setEditandoMonto(false);
-                      onAmount(montoParseado);
+                      onAmount?.(montoParseado);
                     }
                     if (e.key === "Escape") setEditandoMonto(false);
                   }}
@@ -204,7 +206,7 @@ export function LeadDrawer({
                     disabled={montoInvalido}
                     onClick={() => {
                       setEditandoMonto(false);
-                      onAmount(montoParseado);
+                      onAmount?.(montoParseado);
                     }}
                   >
                     Guardar
@@ -235,6 +237,7 @@ export function LeadDrawer({
               </button>
             )}
           </section>
+          )}
 
           {/* A quién llamar primero */}
           <section className="border-b p-4">

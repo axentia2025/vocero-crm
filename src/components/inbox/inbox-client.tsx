@@ -23,6 +23,7 @@ import {
   setConversacionAbierta,
 } from "@/components/avisos-de-mensajes";
 import { citaDe } from "./helpers";
+import { useEquipo } from "@/components/equipo-context";
 import { ContactPanel } from "./contact-panel";
 
 /**
@@ -57,6 +58,10 @@ export function InboxClient({
   canDelete?: boolean;
 }) {
   const multiChannel = channels.length > 1;
+  // La línea de WhatsApp es del negocio: un integrante del equipo lee las
+  // conversaciones de sus contactos y deja notas, pero no envía, no reenvía
+  // ni prende o apaga al agente. El servidor lo niega de todos modos.
+  const { propietario } = useEquipo();
   const [conversations, setConversations] = useState<ConversationDto[] | null>(
     null
   );
@@ -496,6 +501,7 @@ export function InboxClient({
               // a él: el aviso «Imagen reenviada a…» no pasa a otra.
               key={selected.id}
               conversation={selected}
+              soloNotas={!propietario}
               onSend={sendText}
               replyTo={replyTo?.conversationId === selected.id ? replyTo : null}
               onReplyChange={setReplyTo}
@@ -537,15 +543,19 @@ export function InboxClient({
                 // 039: citar solo donde el canal lo permite y se puede escribir
                 // texto libre (con la ventana cerrada solo salen plantillas).
                 onReply={
-                  selected.composer.quoteReply && selected.windowOpen
+                  propietario && selected.composer.quoteReply && selected.windowOpen
                     ? setReplyTo
                     : undefined
                 }
                 conversations={conversations ?? []}
-                onForwarded={() => {
-                  if (selectedIdRef.current) void refetchMessages(selectedIdRef.current);
-                  void refetchConversations();
-                }}
+                onForwarded={
+                  propietario
+                    ? () => {
+                        if (selectedIdRef.current) void refetchMessages(selectedIdRef.current);
+                        void refetchConversations();
+                      }
+                    : undefined
+                }
               />
             </Composer>
           </>
@@ -586,6 +596,7 @@ export function InboxClient({
               conversation={selected}
               refreshKey={detailRev}
               onPatchConversation={patchConversation}
+              controlaAgente={propietario}
               onDeleteConversation={canDelete ? deleteConversation : undefined}
               onClose={() => togglePanel(false)}
             />

@@ -41,6 +41,7 @@ export function ContactPanel({
   onPatchConversation,
   onDeleteConversation,
   onClose,
+  controlaAgente = true,
 }: {
   conversation: ConversationDto;
   /** Aumenta con cada evento SSE relevante: dispara un refetch en vivo. */
@@ -52,6 +53,11 @@ export function ContactPanel({
   /** 026 — Ausente = quien mira no puede eliminar: no se le ofrece. */
   onDeleteConversation?: (alsoContact: boolean) => Promise<string | null>;
   onClose: () => void;
+  /**
+   * Prender o apagar la IA de la conversación (y reactivarla tras un
+   * traspaso) es del propietario. Un integrante ve el estado, sin el control.
+   */
+  controlaAgente?: boolean;
 }) {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [notes, setNotes] = useState("");
@@ -226,14 +232,16 @@ export function ContactPanel({
                 {HANDOFF_LABELS[conversation.handoffReason ?? ""] ??
                   "La IA está en pausa en esta conversación."}
               </p>
-              <Button
-                size="sm"
-                variant="outline"
-                className="mt-2 w-full"
-                onClick={() => void onPatchConversation({ reactivate: true })}
-              >
-                Reactivar IA
-              </Button>
+              {controlaAgente && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="mt-2 w-full"
+                  onClick={() => void onPatchConversation({ reactivate: true })}
+                >
+                  Reactivar IA
+                </Button>
+              )}
             </div>
           )}
 
@@ -251,19 +259,21 @@ export function ContactPanel({
                         : "Activada"}
                 </p>
               </div>
-              <Switch
-                size="sm"
-                checked={aiActive}
-                label="IA en esta conversación"
-                onCheckedChange={() => {
-                  void onPatchConversation({
-                    aiEnabled: !conversation.aiEnabled,
-                  });
-                }}
-              />
+              {controlaAgente && (
+                <Switch
+                  size="sm"
+                  checked={aiActive}
+                  label="IA en esta conversación"
+                  onCheckedChange={() => {
+                    void onPatchConversation({
+                      aiEnabled: !conversation.aiEnabled,
+                    });
+                  }}
+                />
+              )}
             </div>
 
-            {brain && externalActive ? (
+            {!controlaAgente ? null : brain && externalActive ? (
               <p className="mt-2 flex items-center gap-1.5 text-[11px] text-text-3">
                 <Cable className="h-3.5 w-3.5 shrink-0" strokeWidth={1.7} />
                 {externalAnswerLabel(brain)}

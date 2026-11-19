@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { apiError, parseBody, withAuth } from "@/lib/api";
+import { apiError, parseBody, withOwner } from "@/lib/api";
 import { SendError } from "@/server/inbox/send";
 import {
   sendTemplate,
@@ -18,7 +18,7 @@ const bodySchema = z.object({
   variable: z.string().trim().max(500).optional(),
 });
 
-export const POST = withAuth(async (session, req: Request, ctx: Params) => {
+export const POST = withOwner(async (session, req: Request, ctx: Params) => {
   const { id } = await ctx.params;
   const body = await parseBody(req, bodySchema);
   if (!body.ok) return body.response;

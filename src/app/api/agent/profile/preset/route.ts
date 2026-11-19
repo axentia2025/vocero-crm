@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { apiError, parseBody, withAuth } from "@/lib/api";
+import { apiError, parseBody, withOwner } from "@/lib/api";
 import { canConfigure } from "@/lib/auth/roles";
 import { getDb, schema } from "@/lib/db";
 import { scoped } from "@/lib/db/tenant";
@@ -16,7 +16,7 @@ const bodySchema = z.object({
  * herramientas. REEMPLAZA las instrucciones y las reglas de escalado (la
  * pantalla lo confirma antes). Las personas del Laboratorio salen del rol.
  */
-export const POST = withAuth(async (session, req: Request) => {
+export const POST = withOwner(async (session, req: Request) => {
   if (!canConfigure(session.role)) {
     return apiError(403, "forbidden", "Solo quien administra puede cargar un rol");
   }

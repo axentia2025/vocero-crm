@@ -12,7 +12,7 @@ import { personasDelRol } from "@/server/lab/runner";
 /** 034 — Roles como datos: el catálogo, el Calificador y sus personas. */
 describe("el catálogo de herramientas", () => {
   it("las claves son contrato con el cerebro", () => {
-    expect(CLAVES_HERRAMIENTA).toEqual(["ficha", "etapa", "agendar", "reprogramar", "salida", "escalar"]);
+    expect(CLAVES_HERRAMIENTA).toEqual(["ficha", "crear_contacto", "etapa", "agendar", "reprogramar", "salida", "escalar"]);
   });
 
   it("escalar es fija y las de agenda lo dicen", () => {

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { apiError, parseBody, withAuth } from "@/lib/api";
+import { apiError, parseBody, withOwner } from "@/lib/api";
 import {
   getInstagramCredentialsByOrg,
   saveInstagramCredentials,
@@ -16,7 +16,7 @@ import { resolveZernioAccount } from "@/server/zernio/guardar";
 export const dynamic = "force-dynamic";
 
 /** 014 — Estado de la conexión de Instagram (el token nunca sale entero). */
-export const GET = withAuth(async (session) => {
+export const GET = withOwner(async (session) => {
   if (!isChannelEnabled("instagram")) return channelDisabledResponse();
   const creds = await getInstagramCredentialsByOrg(session.organizationId);
   if (!creds) return Response.json({ connection: null });
@@ -49,7 +49,7 @@ const putSchema = z.object({
  * propietario de la organización puede hacerlo (023: esta ruta no lo
  * revisaba; Messenger y TikTok sí).
  */
-export const PUT = withAuth(async (session, req: Request) => {
+export const PUT = withOwner(async (session, req: Request) => {
   if (!isChannelEnabled("instagram")) return channelDisabledResponse();
   if (session.role !== "owner") {
     return apiError(403, "forbidden", "Solo el propietario puede conectar Instagram");

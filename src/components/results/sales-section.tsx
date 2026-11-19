@@ -22,6 +22,9 @@ export function SalesSection({
   currency: string;
 }) {
   const money = (c: number | null) => formatMoneyCents(c, currency) ?? "—";
+  // Un integrante del equipo ve sus conteos, no el dinero (el servidor ya lo
+  // manda en cero; aquí solo no se pintan esas tarjetas).
+  const conDinero = !data?.montosOcultos;
   return (
     <Section
       id="ventas"
@@ -46,11 +49,13 @@ export function SalesSection({
               value={String(data.kpis.won.current)}
               compare={data.kpis.won}
             />
-            <StatCard
-              label="Dinero ganado"
-              value={money(data.kpis.wonCents.current)}
-              compare={data.kpis.wonCents}
-            />
+            {conDinero && (
+              <StatCard
+                label="Dinero ganado"
+                value={money(data.kpis.wonCents.current)}
+                compare={data.kpis.wonCents}
+              />
+            )}
             <StatCard
               label="Tratos perdidos"
               value={String(data.kpis.lost.current)}
@@ -62,15 +67,17 @@ export function SalesSection({
               rate={data.kpis.winRate}
               unit="tratos cerrados"
             />
-            <StatCard
-              label="Ticket promedio"
-              value={money(data.kpis.avgTicketCents)}
-              hint={
-                data.kpis.avgTicketCents === null
-                  ? "ningún trato ganado con monto"
-                  : undefined
-              }
-            />
+            {conDinero && (
+              <StatCard
+                label="Ticket promedio"
+                value={money(data.kpis.avgTicketCents)}
+                hint={
+                  data.kpis.avgTicketCents === null
+                    ? "ningún trato ganado con monto"
+                    : undefined
+                }
+              />
+            )}
           </div>
 
           <div className="grid gap-6 lg:grid-cols-2">
@@ -86,7 +93,7 @@ export function SalesSection({
               points={data.series.map((s) => ({
                 bucket: s.bucket,
                 value: s.won,
-                detail: s.wonCents > 0 ? money(s.wonCents) : undefined,
+                detail: conDinero && s.wonCents > 0 ? money(s.wonCents) : undefined,
               }))}
               format={(v) => String(v)}
               emptyText="Ningún trato ganado en el periodo."
@@ -167,6 +174,7 @@ export function SalesSection({
             </div>
           </div>
 
+          {conDinero && (
           <div>
             <Subhead>Hoy en el embudo</Subhead>
             <p className="-mt-1 mb-2 text-xs text-text-3">
@@ -188,6 +196,7 @@ export function SalesSection({
               </p>
             )}
           </div>
+          )}
 
           {data.completeFrom && (
             <p className="text-[11px] text-text-3">

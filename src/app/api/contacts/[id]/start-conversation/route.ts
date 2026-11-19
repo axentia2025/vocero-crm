@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { z } from "zod";
-import { apiError, parseBody, withAuth } from "@/lib/api";
+import { apiError, parseBody, withOwner } from "@/lib/api";
 import { getDb, schema } from "@/lib/db";
 import { scoped } from "@/lib/db/tenant";
 import { getContactById } from "@/server/contacts";
@@ -30,7 +30,7 @@ const bodySchema = z.object({
  * La conversación se crea AQUÍ y no al capturar el contacto: un hilo vacío
  * ensuciaría la Bandeja y rompería su orden por último mensaje.
  */
-export const POST = withAuth(async (session, req: Request, ctx: Params) => {
+export const POST = withOwner(async (session, req: Request, ctx: Params) => {
   const { id } = await ctx.params;
   const contact = await getContactById(session.organizationId, id);
   if (!contact) return apiError(404, "not_found", "Contacto no encontrado");

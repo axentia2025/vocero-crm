@@ -8,6 +8,18 @@ import { normalizeMx } from "@/lib/meta/client";
 import { digitsOnly, normalizeText } from "@/lib/search";
 import { serializeContact } from "@/server/contacts";
 import { createLeadForContact } from "@/server/inbox/lead-activity";
+import {
+  CAMPO_VENDEDOR,
+  filtroVendedor,
+  parcheDeFichaPermitido,
+  veTodo,
+} from "@/lib/equipo";
+import {
+  condicionContacto,
+  condicionPorContacto,
+  nombresDeVendedores,
+  vendedorDeLaOrganizacion,
+} from "@/server/equipo/acceso";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +37,9 @@ export const GET = withAuth(async (session, req: Request) => {
   const q = url.searchParams.get("q")?.trim();
   const stage = url.searchParams.get("stage")?.trim();
   const includeArchived = url.searchParams.get("archived") === "true";
+  // Un integrante ve solo sus contactos; el propietario, todos o los de un
+  // vendedor (`?vendedor=<userId>` o `?vendedor=sin` para los sin asignar).
+  const vendedor = filtroVendedor(session, url.searchParams.get("vendedor"));
 
   const db = getDb();
 
@@ -42,7 +57,13 @@ export const GET = withAuth(async (session, req: Request) => {
       schema.pipelineStage,
       eq(schema.pipelineStage.id, schema.lead.stageId)
     )
-    .where(scoped(schema.lead.organizationId, session.organizationId));
+    .where(
+      scoped(
+        schema.lead.organizationId,
+        session.organizationId,
+        condicionPorContacto(vendedor, schema.lead.contactId)
+      )
+    );
   const stageByContact = new Map(
     leadStages.map((r) => [r.contactId, r.stageName])
   );
@@ -82,19 +103,23 @@ export const GET = withAuth(async (session, req: Request) => {
         schema.contact.organizationId,
         session.organizationId,
         search,
-        stageContactIds ? inArray(schema.contact.id, stageContactIds) : undefined
+        stageContactIds ? inArray(schema.contact.id, stageContactIds) : undefined,
+        condicionContacto(vendedor)
       )
     )
     .orderBy(desc(schema.contact.updatedAt))
     .limit(200);
 
+  const nombres = await nombresDeVendedores(session.organizationId);
   const contacts = rows
     .filter((c) => includeArchived || !c.archivedAt)
     .map((c) =>
       serializeContact(
         c,
         stageByContact.get(c.id) ?? null,
-        priorityByContact.get(c.id) ?? null
+        priorityByContact.get(c.id) ?? null,
+        false,
+        { role: session.role, nombres }
       )
     );
   return Response.json({ contacts });
@@ -119,11 +144,35 @@ const createSchema = z.object({
   /** Etapa inicial del lead; si no viene, la primera abierta del tablero. */
   stageId: z.string().min(1).optional(),
   ficha: z.record(z.unknown()).optional(),
+  /**
+   * Su vendedor. Solo lo decide el propietario (al dar de alta para alguien
+   * del equipo, o `null` = sin asignar); si no viene, es de quien lo crea. Lo
+   * que mande un integrante se ignora: lo que él registra es suyo.
+   */
+  ownerUserId: z.string().min(1).nullable().optional(),
 });
 
 export const POST = withAuth(async (session, req: Request) => {
   const body = await parseBody(req, createSchema);
   if (!body.ok) return body.response;
+
+  // Quién será su vendedor: quien lo registra, salvo que el propietario lo
+  // asigne a otra cuenta del equipo (o lo deje sin asignar).
+  let dueno: { id: string; name: string } | null =
+    await vendedorDeLaOrganizacion(session.organizationId, session.userId);
+  if (veTodo(session.role) && body.data.ownerUserId !== undefined) {
+    if (body.data.ownerUserId === null) {
+      dueno = null;
+    } else {
+      dueno = await vendedorDeLaOrganizacion(session.organizationId, body.data.ownerUserId);
+      if (!dueno) {
+        return apiError(422, "invalid_owner", "Ese vendedor no es parte del equipo");
+      }
+    }
+  }
+  // El dinero de la ficha lo captura el propietario; «Vendedor» sale del dueño.
+  const ficha = parcheDeFichaPermitido(body.data.ficha ?? {}, session.role);
+  if (dueno) ficha[CAMPO_VENDEDOR] = dueno.name;
 
   const db = getDb();
   // 003: la identidad WhatsApp se deriva del teléfono normalizado.
@@ -139,7 +188,8 @@ export const POST = withAuth(async (session, req: Request) => {
       email: body.data.email ?? null,
       notes: body.data.notes ?? null,
       source: body.data.source ?? null,
-      ficha: body.data.ficha ?? null,
+      ficha: Object.keys(ficha).length > 0 ? ficha : null,
+      ownerUserId: dueno?.id ?? null,
     })
     // El canal entra en el target porque entra en el índice único desde 014
     // (`contact_org_channel_identity_uq`). Postgres exige que el ON CONFLICT
@@ -155,17 +205,31 @@ export const POST = withAuth(async (session, req: Request) => {
     .returning();
   if (!inserted[0]) {
     const [existing] = await db
-      .select({ id: schema.contact.id, name: schema.contact.name })
+      .select({
+        id: schema.contact.id,
+        name: schema.contact.name,
+        ownerUserId: schema.contact.ownerUserId,
+      })
       .from(schema.contact)
       .where(
         scoped(schema.contact.organizationId, session.organizationId,
           eq(schema.contact.waIdentity, phone))
       )
       .limit(1);
+    // A un integrante solo se le dice de QUIÉN es si es suyo: el prospecto de
+    // otro vendedor (o el que llegó por WhatsApp) no se revela, solo que ya
+    // está registrado y que lo vea el propietario.
+    const propio =
+      existing && (veTodo(session.role) || existing.ownerUserId === session.userId);
     return Response.json(
       {
-        error: { code: "duplicate", message: "Ya existe un contacto con ese teléfono" },
-        contact: existing ? { id: existing.id, name: existing.name } : undefined,
+        error: {
+          code: "duplicate",
+          message: propio
+            ? "Ya existe un contacto con ese teléfono"
+            : "Ese teléfono ya está registrado en el CRM. Consúltalo con el propietario.",
+        },
+        contact: propio ? { id: existing.id, name: existing.name } : undefined,
       },
       { status: 409 }
     );
@@ -189,8 +253,15 @@ export const POST = withAuth(async (session, req: Request) => {
     );
   }
 
+  const nombres = new Map(dueno ? [[dueno.id, dueno.name]] : []);
   return Response.json(
-    { contact: serializeContact(inserted[0]), lead: { id: lead.id } },
+    {
+      contact: serializeContact(inserted[0], null, null, false, {
+        role: session.role,
+        nombres,
+      }),
+      lead: { id: lead.id },
+    },
     { status: 201 }
   );
 });

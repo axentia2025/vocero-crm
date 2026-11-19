@@ -3,7 +3,8 @@ import {
   TEXT_TOO_LONG_ANY_CHANNEL,
 } from "@/server/channels/capabilities";
 import { z } from "zod";
-import { apiError, parseBody, withAuth } from "@/lib/api";
+import { apiError, parseBody, withAuth, withOwner } from "@/lib/api";
+import { conversacionVisible } from "@/server/equipo/acceso";
 import { getConversation, listMessages } from "@/server/inbox/queries";
 import { serializeMessage } from "@/server/inbox/ingest";
 import { resolverCitas } from "@/server/inbox/quotes";
@@ -15,6 +16,10 @@ type Params = { params: Promise<{ id: string }> };
 
 export const GET = withAuth(async (session, req: Request, ctx: Params) => {
   const { id } = await ctx.params;
+  // Un integrante del equipo solo lee las conversaciones de sus contactos.
+  if (!(await conversacionVisible(session, id))) {
+    return apiError(404, "not_found", "Conversación no encontrada");
+  }
   const row = await getConversation(session.organizationId, id);
   if (!row) return apiError(404, "not_found", "Conversación no encontrada");
 
@@ -95,7 +100,9 @@ const SEND_ERROR_STATUS: Record<SendError["code"], number> = {
   reply_unavailable: 422,
 };
 
-export const POST = withAuth(async (session, req: Request, ctx: Params) => {
+// La línea de WhatsApp es del negocio: solo el propietario escribe por ella.
+// El equipo registra y da seguimiento (notas internas), no envía.
+export const POST = withOwner(async (session, req: Request, ctx: Params) => {
   const { id } = await ctx.params;
   const body = await parseBody(req, sendSchema);
   if (!body.ok) return body.response;

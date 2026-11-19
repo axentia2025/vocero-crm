@@ -10,6 +10,8 @@ import { AppNav } from "@/components/app-nav";
 import { BrandLogo } from "@/components/brand-mark";
 import { BandaSinConexion } from "@/components/banda-sin-conexion";
 import { AtajosGlobales } from "@/components/atajos-globales";
+import { EquipoProvider } from "@/components/equipo-context";
+import type { EquipoDto } from "@/lib/equipo";
 
 /**
  * Cascarón de la app en dos modos:
@@ -32,6 +34,7 @@ export function AppShell({
   agenda = false,
   kicker,
   aviso = null,
+  equipo,
   children,
 }: {
   branding: Branding;
@@ -53,6 +56,8 @@ export function AppShell({
    * no responde nadie.
    */
   aviso?: React.ReactNode;
+  /** Quién mira y su equipo de ventas (ver `components/equipo-context`). */
+  equipo: EquipoDto;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -74,6 +79,7 @@ export function AppShell({
   }, [navOpen]);
 
   return (
+    <EquipoProvider equipo={equipo}>
     <div className="flex h-dvh overflow-hidden bg-background">
       {navOpen && (
         <button
@@ -120,5 +126,6 @@ export function AppShell({
         <main className="min-h-0 min-w-0 flex-1 overflow-hidden">{children}</main>
       </div>
     </div>
+    </EquipoProvider>
   );
 }

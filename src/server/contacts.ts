@@ -3,14 +3,25 @@ import { getDb, schema } from "@/lib/db";
 import { scoped } from "@/lib/db/tenant";
 import { effectiveSource } from "@/server/contact-source";
 import type { FichaDto, PriorityValue } from "@/lib/types";
+import { fichaParaRol } from "@/lib/equipo";
+
+/**
+ * Quién mira el contacto: con su rol se decide si ve el dinero de la ficha, y
+ * con los nombres del equipo se pinta «Vendedor» desde el dueño.
+ */
+export type VistaDeContacto = { role: string; nombres: Map<string, string> };
 
 export function serializeContact(
   c: typeof schema.contact.$inferSelect,
   stageName: string | null = null,
   priority: PriorityValue | null = null,
   /** 018: si llegó por un anuncio, la fuente no capturada se deduce "anuncio". */
-  llegoPorAnuncio = false
+  llegoPorAnuncio = false,
+  /** Sin vista (API del bot) la ficha sale tal cual está guardada. */
+  vista?: VistaDeContacto
 ) {
+  const ficha = (c.ficha as FichaDto | null) ?? {};
+  const nombreDueno = c.ownerUserId ? (vista?.nombres.get(c.ownerUserId) ?? null) : null;
   return {
     id: c.id,
     name: c.name,
@@ -24,7 +35,9 @@ export function serializeContact(
     priority,
     // Viaja siempre, aunque esté vacía: la pantalla necesita distinguir "aún
     // no la han llenado" de "este contacto no la trae".
-    ficha: (c.ficha as FichaDto | null) ?? {},
+    ficha: vista ? fichaParaRol(ficha, vista.role, nombreDueno) : ficha,
+    /** Su vendedor (dueño en el CRM); null = sin asignar. */
+    owner: c.ownerUserId ? { id: c.ownerUserId, name: nombreDueno ?? "" } : null,
   };
 }
 

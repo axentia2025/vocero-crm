@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { apiError, parseBody, withAuth } from "@/lib/api";
+import { apiError, parseBody, withOwner } from "@/lib/api";
 import {
   desconectarCanal,
   getCredentialsByOrg,
@@ -19,7 +19,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export const GET = withAuth(async (session) => {
+export const GET = withOwner(async (session) => {
   const creds = await getCredentialsByOrg(session.organizationId);
   if (!creds) return Response.json({ connection: null });
   return Response.json({
@@ -49,7 +49,7 @@ const putSchema = z.object({
  * guardada y es válida: se avisa en `webhook` y la tarjeta del webhook ofrece
  * reintentar (o pegar la URL a mano, que sigue a la vista).
  */
-export const PUT = withAuth(async (session, req: Request) => {
+export const PUT = withOwner(async (session, req: Request) => {
   const body = await parseBody(req, putSchema);
   if (!body.ok) return body.response;
 
@@ -93,7 +93,7 @@ export const PUT = withAuth(async (session, req: Request) => {
  * borra la bandeja: las conversaciones son de la organización, no de la
  * conexión. Idempotente: sin conexión responde 200 igual.
  */
-export const DELETE = withAuth(async (session) => {
+export const DELETE = withOwner(async (session) => {
   const creds = await getCredentialsByOrg(session.organizationId);
   if (creds) {
     await unregisterWebhookForNumber({

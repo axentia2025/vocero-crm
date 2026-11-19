@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { apiError, parseBody, withAuth } from "@/lib/api";
+import { apiError, parseBody, withOwner } from "@/lib/api";
 import { IMPORT_MAX_ROWS, prepareImport } from "@/lib/contact-import";
 import { importContacts } from "@/server/contacts-import";
 
@@ -27,7 +27,7 @@ const importSchema = z.object({
  * teléfono sin código de país crearía un contacto que nunca casa con quien
  * escriba después.
  */
-export const POST = withAuth(async (session, req: Request) => {
+export const POST = withOwner(async (session, req: Request) => {
   const body = await parseBody(req, importSchema);
   if (!body.ok) return body.response;
 
@@ -42,6 +42,8 @@ export const POST = withAuth(async (session, req: Request) => {
 
   const result = await importContacts(session.organizationId, valid, {
     aiPaused: body.data.aiPaused ?? false,
+    // Lo importado es de quien lo importa (el propietario: importar es suyo).
+    ownerUserId: session.userId,
   });
   return Response.json({ ...result, skipped: problems });
 });

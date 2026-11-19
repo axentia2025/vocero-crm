@@ -1,6 +1,7 @@
 import { z } from "zod";
-import { apiError, parseBody, withAuth } from "@/lib/api";
+import { apiError, parseBody, withAuth, withOwner } from "@/lib/api";
 import { canConfigure } from "@/lib/auth/roles";
+import { conversacionVisible } from "@/server/equipo/acceso";
 import { newId } from "@/lib/db/ids";
 import { construirEventoOlvido } from "@/server/brains/contract";
 import { avisarOlvido, type ResultadoOlvido } from "@/server/brains/deliver";
@@ -22,6 +23,18 @@ export const PATCH = withAuth(async (session, req: Request, ctx: Params) => {
   const { id } = await ctx.params;
   const body = await parseBody(req, patchSchema);
   if (!body.ok) return body.response;
+
+  if (!(await conversacionVisible(session, id))) {
+    return apiError(404, "not_found", "Conversación no encontrada");
+  }
+  // Prender o apagar al agente es decidir cómo contesta la línea del negocio:
+  // un integrante del equipo solo marca como leída.
+  if (
+    !canConfigure(session.role) &&
+    (body.data.aiEnabled !== undefined || body.data.reactivate !== undefined)
+  ) {
+    return apiError(403, "forbidden", "Solo el propietario enciende o apaga el agente");
+  }
 
   const updated = await updateConversation(session.organizationId, id, body.data);
   if (!updated) return apiError(404, "not_found", "Conversación no encontrada");
@@ -53,14 +66,7 @@ const FECHA_DE_CITA = new Intl.DateTimeFormat("es-MX", { dateStyle: "long" });
  * Es irreversible en los dos casos, y por eso exige rol de configuración
  * (propietario o administrador) y no solo operar la bandeja.
  */
-export const DELETE = withAuth(async (session, req: Request, ctx: Params) => {
-  if (!canConfigure(session.role)) {
-    return apiError(
-      403,
-      "forbidden",
-      "Solo quien administra el negocio puede eliminar conversaciones"
-    );
-  }
+export const DELETE = withOwner(async (session, req: Request, ctx: Params) => {
   const { id } = await ctx.params;
   const alcance =
     new URL(req.url).searchParams.get("contacto") === "1" ? "contacto" : "hilo";

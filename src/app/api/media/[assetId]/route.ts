@@ -4,6 +4,7 @@ import { getDb, schema } from "@/lib/db";
 import { scoped } from "@/lib/db/tenant";
 import { ensureAssetAvailable, leerAdjunto } from "@/server/whatsapp/media";
 import { mediaResponseHeaders } from "@/server/whatsapp/media-headers";
+import { adjuntoVisible } from "@/server/equipo/acceso";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,10 @@ export const GET = withAuth(async (session, _req: Request, ctx: Params) => {
   const { assetId } = await ctx.params;
   if (!/^[\w.-]{1,64}$/.test(assetId)) {
     return apiError(422, "invalid", "assetId inválido");
+  }
+  // El adjunto de una conversación ajena, para un integrante, no existe.
+  if (!(await adjuntoVisible(session, assetId))) {
+    return apiError(404, "not_found", "Adjunto no encontrado");
   }
 
   const db = getDb();

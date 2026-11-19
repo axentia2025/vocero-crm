@@ -15,6 +15,11 @@ import {
 import { LOSS_REASON_LABEL, type LossReason } from "@/lib/types";
 import type { ResolvedPeriod } from "@/server/analytics/period";
 import { localDateExpr, notLabContact } from "@/server/analytics/shared";
+import type { FiltroVendedor } from "@/lib/equipo";
+import { condicionPorContacto } from "@/server/equipo/acceso";
+
+/** Todos los contactos: lo de siempre, para quien no filtra por vendedor. */
+const TODOS: FiltroVendedor = { tipo: "todos" };
 
 /**
  * 019 — Bloque de ventas y embudo.
@@ -30,7 +35,14 @@ import { localDateExpr, notLabContact } from "@/server/analytics/shared";
 export async function salesBlock(
   organizationId: string,
   period: ResolvedPeriod,
-  businessCurrency: string
+  businessCurrency: string,
+  /**
+   * De quién son los tratos que se cuentan: los de un vendedor, los sin
+   * asignar o todos. Se aplica junto al filtro del Laboratorio, en cada
+   * consulta que cuenta leads, para que indicadores, serie y embudo hablen
+   * de los mismos tratos.
+   */
+  vendedor: FiltroVendedor = TODOS
 ): Promise<SalesBlockDto> {
   const { start, end, previousStart, previousEnd } = period;
 
@@ -38,22 +50,22 @@ export async function salesBlock(
   // indicadores, la serie y los motivos de pérdida. Si cada bloque lo dedujera
   // por su cuenta podrían contradecirse entre sí en la misma pantalla.
   const [desenlaces, desenlacesPrev] = await Promise.all([
-    desenlacesDelPeriodo(organizationId, start, end),
-    desenlacesDelPeriodo(organizationId, previousStart, previousEnd),
+    desenlacesDelPeriodo(organizationId, start, end, vendedor),
+    desenlacesDelPeriodo(organizationId, previousStart, previousEnd, vendedor),
   ]);
   const cerrados = clasificarCierres(desenlaces, businessCurrency);
   const cerradosPrev = clasificarCierres(desenlacesPrev, businessCurrency);
 
   const [nuevos, nuevosPrev, timeToWinDays, serie, embudo, tiempos, completeFrom, vivo] =
     await Promise.all([
-      contarNuevos(organizationId, start, end),
-      contarNuevos(organizationId, previousStart, previousEnd),
+      contarNuevos(organizationId, start, end, vendedor),
+      contarNuevos(organizationId, previousStart, previousEnd, vendedor),
       diasHastaGanar(organizationId, cerrados.won),
-      serieTemporal(organizationId, period, cerrados.won, businessCurrency),
-      embudoCohorte(organizationId, start, end),
-      tiemposPorEtapa(organizationId, start, end),
+      serieTemporal(organizationId, period, cerrados.won, businessCurrency, vendedor),
+      embudoCohorte(organizationId, start, end, vendedor),
+      tiemposPorEtapa(organizationId, start, end, vendedor),
       primerEventoReal(organizationId),
-      pipelineVivo(organizationId, businessCurrency),
+      pipelineVivo(organizationId, businessCurrency, vendedor),
     ]);
 
   const wonCount = cerrados.won.length;
@@ -94,7 +106,8 @@ export async function salesBlock(
 async function contarNuevos(
   organizationId: string,
   start: Date,
-  end: Date
+  end: Date,
+  vendedor: FiltroVendedor = TODOS
 ): Promise<number> {
   const rows = await getDb()
     .select({ n: sql<number>`count(*)::int` })
@@ -105,7 +118,8 @@ async function contarNuevos(
         organizationId,
         gte(schema.lead.createdAt, start),
         lt(schema.lead.createdAt, end),
-        notLabContact(schema.lead.contactId)
+        notLabContact(schema.lead.contactId),
+        condicionPorContacto(vendedor, schema.lead.contactId)
       )
     );
   return rows[0]?.n ?? 0;
@@ -141,7 +155,8 @@ export type Desenlace = {
 async function desenlacesDelPeriodo(
   organizationId: string,
   start: Date,
-  end: Date
+  end: Date,
+  vendedor: FiltroVendedor = TODOS
 ): Promise<Desenlace[]> {
   return getDb()
     .selectDistinctOn([schema.leadStageEvent.leadId], {
@@ -159,7 +174,8 @@ async function desenlacesDelPeriodo(
         organizationId,
         gte(schema.leadStageEvent.occurredAt, start),
         lt(schema.leadStageEvent.occurredAt, end),
-        notLabContact(schema.leadStageEvent.contactId)
+        notLabContact(schema.leadStageEvent.contactId),
+        condicionPorContacto(vendedor, schema.leadStageEvent.contactId)
       )
     )
     .orderBy(
@@ -240,7 +256,8 @@ async function serieTemporal(
   organizationId: string,
   period: ResolvedPeriod,
   wonLeadIds: string[],
-  businessCurrency: string
+  businessCurrency: string,
+  vendedor: FiltroVendedor = TODOS
 ): Promise<SalesBlockDto["series"]> {
   const db = getDb();
   const { start, end, timezone } = period;
@@ -259,7 +276,8 @@ async function serieTemporal(
           organizationId,
           gte(schema.lead.createdAt, start),
           lt(schema.lead.createdAt, end),
-          notLabContact(schema.lead.contactId)
+          notLabContact(schema.lead.contactId),
+          condicionPorContacto(vendedor, schema.lead.contactId)
         )
       )
       // GROUP BY 1 (posición), no la expresión repetida: `localDateExpr` lleva
@@ -333,7 +351,8 @@ async function serieTemporal(
 async function embudoCohorte(
   organizationId: string,
   start: Date,
-  end: Date
+  end: Date,
+  vendedor: FiltroVendedor = TODOS
 ): Promise<FunnelStepDto[]> {
   const db = getDb();
 
@@ -363,7 +382,8 @@ async function embudoCohorte(
           organizationId,
           gte(schema.lead.createdAt, start),
           lt(schema.lead.createdAt, end),
-          notLabContact(schema.leadStageEvent.contactId)
+          notLabContact(schema.leadStageEvent.contactId),
+          condicionPorContacto(vendedor, schema.leadStageEvent.contactId)
         )
       )
       .groupBy(schema.leadStageEvent.leadId),
@@ -419,7 +439,8 @@ export function armarEmbudo(
 async function tiemposPorEtapa(
   organizationId: string,
   start: Date,
-  end: Date
+  end: Date,
+  vendedor: FiltroVendedor = TODOS
 ): Promise<StageTimingDto[]> {
   const rows = await getDb()
     .select({
@@ -437,7 +458,8 @@ async function tiemposPorEtapa(
         eq(schema.leadStageEvent.approximate, false),
         gte(schema.leadStageEvent.occurredAt, start),
         lt(schema.leadStageEvent.occurredAt, end),
-        notLabContact(schema.leadStageEvent.contactId)
+        notLabContact(schema.leadStageEvent.contactId),
+        condicionPorContacto(vendedor, schema.leadStageEvent.contactId)
       )
     );
 
@@ -510,7 +532,8 @@ export function motivosDePerdida(desenlaces: Desenlace[]): LossReasonRowDto[] {
  */
 async function pipelineVivo(
   organizationId: string,
-  businessCurrency: string
+  businessCurrency: string,
+  vendedor: FiltroVendedor = TODOS
 ): Promise<SalesBlockDto["pipeline"]> {
   const mismaMoneda = sql`coalesce(${schema.lead.currency}, ${businessCurrency}) = ${businessCurrency}`;
   const rows = await getDb()
@@ -526,7 +549,8 @@ async function pipelineVivo(
         schema.lead.organizationId,
         organizationId,
         eq(schema.pipelineStage.kind, "open"),
-        notLabContact(schema.lead.contactId)
+        notLabContact(schema.lead.contactId),
+        condicionPorContacto(vendedor, schema.lead.contactId)
       )
     );
 

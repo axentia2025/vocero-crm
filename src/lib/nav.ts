@@ -65,22 +65,29 @@ export function appNavGroups({
   // sección aparte.
   if (agenda) trabajo.push({ href: "/bookings", label: "Citas", icon: CalendarDays });
 
-  const agente: NavItem[] = [];
-  // Un miembro del equipo no puede hacer ninguno de los pasos de la guía.
-  if (canConfigure(role)) {
-    agente.push({ href: "/onboarding", label: "Guía de inicio", icon: ListChecks });
-  }
-  agente.push(
-    { href: "/agent", label: "Agente", icon: Sparkles },
-    { href: "/lab", label: "Laboratorio", icon: FlaskConical }
-  );
+  // 019 — Se mide al final: primero se atiende y se organiza.
+  const resultados: NavGroup = {
+    items: [{ href: "/results", label: "Resultados", icon: ChartColumn }],
+  };
 
-  return [
-    { title: "Trabajo", items: trabajo },
-    { title: "Agente", items: agente },
-    // 019 — Se mide al final: primero se atiende y se organiza.
-    { items: [{ href: "/results", label: "Resultados", icon: ChartColumn }] },
+  // Un integrante del equipo de ventas no configura al agente (ni la guía,
+  // ni el Agente, ni el Laboratorio): trabaja sus contactos y ve sus números.
+  if (!canConfigure(role)) {
+    return [{ title: "Trabajo", items: trabajo }, resultados];
+  }
+
+  const agente: NavItem[] = [
+    { href: "/onboarding", label: "Guía de inicio", icon: ListChecks },
+    { href: "/agent", label: "Agente", icon: Sparkles },
+    { href: "/lab", label: "Laboratorio", icon: FlaskConical },
   ];
+
+  return [{ title: "Trabajo", items: trabajo }, { title: "Agente", items: agente }, resultados];
+}
+
+/** Ajustes (WhatsApp, IA, equipo…) solo aparece para quien configura. */
+export function muestraAjustes(role?: string | null): boolean {
+  return canConfigure(role);
 }
 
 export type SettingsLink = { href: string; label: string };

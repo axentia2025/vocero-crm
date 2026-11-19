@@ -89,7 +89,7 @@ describe("serializeBotProfile", () => {
         escalationRules: "Urgencias de dolor → humano.",
         greeting: "¡Hola! Soy Sofi 🦷",
         role: "calificador",
-        tools: ["ficha", "etapa", "agendar", "reprogramar", "salida", "escalar"],
+        tools: ["ficha", "crear_contacto", "etapa", "agendar", "reprogramar", "salida", "escalar"],
       },
       kb: "P: ¿Cuánto cuesta?\nR: $800.",
       resources: [],
