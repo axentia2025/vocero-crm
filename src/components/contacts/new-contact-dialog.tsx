@@ -97,7 +97,7 @@ export function NewContactDialog({
     onCreated();
   }
 
-  const listo = name.trim().length > 0 && phone.replace(/\D/g, "").length >= 11;
+  const listo = name.trim().length > 0 && phone.replace(/\D/g, "").length >= 10;
 
   return (
     <div
